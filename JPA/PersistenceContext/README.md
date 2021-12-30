@@ -17,10 +17,12 @@
 
 ## J2SE 환경
 엔티티 매니저와 영속성 컨텍스트가 1:1
+
 ![](./PersistenceContext/2.png)
 
 ## J2EE, 스프링 프레임워크와 같은 컨테이너 환경
 엔티티 매니저와 영속성 컨텍스트가 N:1
+
 ![](./PersistenceContext/3.png)
 
 ## 엔티티의 생명주기
@@ -138,8 +140,9 @@ em.persist(memberB);
 transaction.commit();
 ```
 
-| `em.persist(memberA);` | ![](./PersistenceContext/9.png)  |
+| 호출 메서드                 | 동작방식                             |
 |------------------------|----------------------------------|
+| `em.persist(memberA);` | ![](./PersistenceContext/9.png)  |
 | `em.persist(memberB);` | ![](./PersistenceContext/10.png) |
 | `transaction.commit()` | ![](./PersistenceContext/11.png) |
 
@@ -179,6 +182,7 @@ transaction.commit(); // [트랜잭션] 커밋
     (등록, 수정, 삭제 쿼리)
   * `1차 캐시`가 지워지는 것은 아님
   
+
   | `flush` 호출 방법 | 기능         |
   |---------------|------------|
   | `em.flush()`  | 직접 호출      |
@@ -186,17 +190,18 @@ transaction.commit(); // [트랜잭션] 커밋
   | JPQL 쿼리 발생    | 플러시 자동 호출  |
 
 * JPQL 쿼리 실행시 플러시가 자동으로 호출되는 이유
-    ```java
-    em.persist(memberA);
-    em.persist(memberB);
-    em.persist(memberC);
-    //중간에 JPQL 실행
-    query = em.createQuery("select m from Member m", Member.class);
-    List<Member> members= query.getResultList();
-    ```
-  * JPQL 쿼리를 날릴 때 자동으로 `flush`되지 않는다면
-    `memberA`, `memberB`, `memberC`가 DB 쿼리로
-    불가능하기 때문에 항상 자동으로 `flush` 된다.
+
+```java
+em.persist(memberA);
+em.persist(memberB);
+em.persist(memberC);
+//중간에 JPQL 실행
+query = em.createQuery("select m from Member m", Member.class);
+List<Member> members= query.getResultList();
+```
+* JPQL 쿼리를 날릴 때 자동으로 `flush`되지 않는다면
+  `memberA`, `memberB`, `memberC`가 DB 쿼리로
+  불가능하기 때문에 항상 자동으로 `flush` 된다.
 
 ## 플러시 모드 옵션
 ```java
@@ -205,6 +210,7 @@ em.setFlushMode(FlushModeType.COMMIT)
 
 * `FlushModeType.AUTO`
   * 커밋이나 쿼리를 실행할 때 플러시(기본값)
+
 * `FlushModeType.COMMIT`
   * 커밋할 때만 플러시
   * 상황에 따라 유용할 수 있음
@@ -220,8 +226,8 @@ em.setFlushMode(FlushModeType.COMMIT)
 * 영속성 컨텍스트가 제공하는 기능을 사용 못함
 * 준영속 상태로 만드는 방법
 
-    | 준영속 상태로 만드는 방법      | 기능                | 
-    |-------------------|---------------|
-    | `em.detach(entity)` | 특정 엔티티만 준영속 상태로 전환 |
-    | `em.clear()`                 | 영속성 컨텍스트를 완전히 초기화 |
-    | `em.close`          | 영속성 컨텍스트를 종료      |
+| 준영속 상태로 만드는 방법      | 기능                | 
+|-------------------|---------------|
+| `em.detach(entity)` | 특정 엔티티만 준영속 상태로 전환 |
+ | `em.clear()`                 | 영속성 컨텍스트를 완전히 초기화 |
+ | `em.close`          | 영속성 컨텍스트를 종료      |
