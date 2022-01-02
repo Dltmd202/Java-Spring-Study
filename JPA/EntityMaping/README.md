@@ -166,7 +166,7 @@ create table Member(
 | `unique(DDL)`                 | `@Table`의 `uniqueConstraints`와 같지만 한 컬럼에 간단히 유니크 제 약조건을 걸 때 사용한다. <br/> 이 방식은 디버깅이 용이하지 않아 잘 사용하지 않음                                                                      |                     |
 | `columnDefinition (DDL)`      | 데이터베이스 컬럼 정보를 직접 줄 수 있다.<br/> ex) `varchar(100) default ‘EMPTY'`                                                                                                          | 필드의 자바 타입과 방언 정보를 사용해 |
 | `length(DDL)`                 | 문자 길이 제약조건, String 타입에만 사용한다.                                                                                                                                             | 255                 |
-    | `precision`,<br/>`scale(DDL)` | `BigDecimal` 타입에서 사용한다(`BigInteger`도 사용할 수 있다). `precision`은 소수점을 포함한 전체 자 릿수를, `scale`은 소수의 자릿수 다. 참고로 `double`, `float` 타입에는 적용되지 않는다. 아주 큰 숫자나 정 밀한 소수를 다루어야 할 때만 사용한다. | precision=19,<br/> scale=2                    |
+| `precision`,<br/>`scale(DDL)` | `BigDecimal` 타입에서 사용한다(`BigInteger`도 사용할 수 있다). `precision`은 소수점을 포함한 전체 자 릿수를, `scale`은 소수의 자릿수 다. 참고로 `double`, `float` 타입에는 적용되지 않는다. 아주 큰 숫자나 정 밀한 소수를 다루어야 할 때만 사용한다. | precision=19,<br/> scale=2                    |
 
 
 ## `@Eumerated`
