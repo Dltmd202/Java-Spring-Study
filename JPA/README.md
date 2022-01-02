@@ -6,3 +6,6 @@
 
 ### 영속성 관리 - 내부 동작 방식
 * [영속성 관리](./PersistenceContext)
+
+### 엔티티 매핑
+* [엔티티 매핑](./EntityMaping)
