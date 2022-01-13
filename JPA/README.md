@@ -9,3 +9,6 @@
 
 ### 엔티티 매핑
 * [엔티티 매핑](./EntityMaping)
+
+### 연관관계 매핑 기초
+* [단방향 연관관계](./RelationalMapping)
