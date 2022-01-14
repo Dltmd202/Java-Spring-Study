@@ -144,3 +144,68 @@ em.persist(member);
 > 그렇지 않으면 `Team` 테이블을 조작했는지 `Member` 테이블에 업데이트
 > 성능이슈도 있음
 
+### 양방향 매핑시 가장 많이 하는 실수
+
+```java
+Team team = new Team();
+team.setName("TeamA");
+em.persist(team);
+
+Member member = new Member();
+member.setName("member1");
+em.persist(member);
+
+em.flush();
+en.clear();
+
+tx.commit();
+```
+
+### 양방향 매핑시 연관관꼐의 주인에 값을 입력해야 한다.
+
+* `team`의 `getMembers()`를 참고하면 이 시점에 `JPA`에서 `fk`를 이용하여 `members`의 데이터를 긁어오는 새로운 쿼리를 
+  만들기 때문에 `members`를 관리해줄 필요가 없다.
+
+* 하지만 `em.flush();` `en.clear();` 를 해주지 않는다면 영속성 컨텍스츠의 1차 캐시에서 이미 조회되어 긁어오는 쿼리를 날리지 않음으로
+  조회가 불가능하다. 이를 방지하기 위해서; 객체지향적으로 양방향의 조회를 하는 매커니즘에 맞추어 `team.getMembers().add(member)`를
+  해주는게 좋다.
+
+* 이러한 방법도 좋다.
+
+```java
+@Entity
+public class Member {
+    
+    @ManyToOne
+    @JoinColumn(name = "TEAM_ID")
+    private Team team;
+
+    public Team getTeam() {
+        return team;
+    }
+
+    public void setTeam(Team team) {
+        this.team = team;
+        team.getMembers().add(this);
+    }
+}
+```
+
+* 양방향 매핑시 무한 루프를 조심해야 한다.
+  * 예: `toString`, `lombok`, `json`
+
+## 양방향 매핑 정리
+
+* #### 단방향 매핑만으로도 이미 연관관계 매핑은 완료
+
+* 양방향 매핑은 반대 방향으로 조회(객체 그래프 탐색) 기능이 추가된 것 뿐
+
+* JPQL 에서 역방향으로 탐색할 일이 많음
+
+* 단방향 매핑을 잘 하고 양방향은 필요할 때 추가해도 됨
+
+## 연관관계의 주인을 정하는 기준
+
+* 비즈니스 로직을 기준으로 연관관계의 주인을 선택하면 안됨
+* 연관관계의 주인은 외래 키의 위치를 기준으로 정해야 함
+
