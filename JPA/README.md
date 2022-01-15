@@ -12,3 +12,6 @@
 
 ### 연관관계 매핑 기초
 * [연관관계 매핑](./RelationalMapping)
+
+### 다양한 연관관계 매핑
+* [다양한 연관관계 매핑](./VariousMapping)
