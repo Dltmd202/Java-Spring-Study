@@ -1,7 +1,7 @@
 ### 프로젝트 생성
 
 
-####스프링 부트 라이브러리
+#### 스프링 부트 라이브러리
 
 * spring-boot-starter-web 
   * spring-boot-starter-tomcat: 톰캣 (웹서버) 
