@@ -3,6 +3,8 @@
   <component name="ExternalStorageConfigurationManager" enabled="true" />
   <component name="FrameworkDetectionExcludesConfiguration">
     <file type="web" url="file://$PROJECT_DIR$/springBootJPA/jpashop" />
+    <file type="web" url="file://$PROJECT_DIR$/springBootJPA/sprintbootjpaex" />
+    <file type="web" url="file://$PROJECT_DIR$/sprintSecurity/jwtTutorial" />
   </component>
   <component name="MavenProjectsManager">
     <option name="originalFiles">
@@ -14,6 +16,7 @@
         <option value="$PROJECT_DIR$/JPA/VariousMapping/jpashop/pom.xml" />
         <option value="$PROJECT_DIR$/JPA/AdvancedMapping/jpa-basic/pom.xml" />
         <option value="$PROJECT_DIR$/JPA/AdvancedMapping/jpashop/pom.xml" />
+        <option value="$PROJECT_DIR$/JPA/Proxy/jpashop/pom.xml" />
       </list>
     </option>
   </component>
