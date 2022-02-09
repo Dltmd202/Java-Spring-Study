@@ -10,6 +10,20 @@
         </processorPath>
         <module name="jwtTutorial.main" />
       </profile>
+      <profile name="Maven default annotation processors profile" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <module name="jpabook (1)" />
+        <module name="ex1-hello-jpa (1)" />
+        <module name="jpabook (4)" />
+        <module name="jpabook (5)" />
+        <module name="jpabook (2)" />
+        <module name="jpabook (3)" />
+        <module name="ex1-hello-jpa" />
+        <module name="jpabook" />
+        <module name="jpa-basic" />
+      </profile>
     </annotationProcessing>
   </component>
 </project>

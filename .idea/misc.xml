@@ -17,6 +17,7 @@
         <option value="$PROJECT_DIR$/JPA/AdvancedMapping/jpa-basic/pom.xml" />
         <option value="$PROJECT_DIR$/JPA/AdvancedMapping/jpashop/pom.xml" />
         <option value="$PROJECT_DIR$/JPA/Proxy/jpashop/pom.xml" />
+        <option value="$PROJECT_DIR$/JPA/ValueType/jpashop/pom.xml" />
       </list>
     </option>
   </component>
