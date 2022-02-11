@@ -15,6 +15,7 @@
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
         <module name="jpabook (1)" />
+        <module name="ex1-hello-jpa (2)" />
         <module name="ex1-hello-jpa (1)" />
         <module name="jpabook (4)" />
         <module name="jpabook (5)" />

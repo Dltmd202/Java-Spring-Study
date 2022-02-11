@@ -3,17 +3,15 @@ package hellojpa;
 import javax.persistence.*;
 
 @Entity
-public class Member extends BaseEntity{
+@Table(name = "MEMBER")
+public class Member {
 
     @Id @GeneratedValue
-    @Column(name = "MEMBER_ID")
     private Long id;
 
-    @Column(name = "NAME")
-    private String name;
+    private String username;
 
-//    @Column(name = "TEAM_ID")
-//    private Long teamId;
+    private int age;
 
     @ManyToOne
     @JoinColumn(name = "TEAM_ID")
@@ -27,20 +25,27 @@ public class Member extends BaseEntity{
         this.id = id;
     }
 
-    public String getName() {
-        return name;
+    public String getUsername() {
+        return username;
     }
 
-    public void setName(String name) {
-        this.name = name;
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public int getAge() {
+        return age;
+    }
+
+    public void setAge(int age) {
+        this.age = age;
     }
 
     public Team getTeam() {
         return team;
     }
 
-    public void changeTeam(Team team) {
+    public void setTeam(Team team) {
         this.team = team;
-        team.getMembers().add(this);
     }
 }
