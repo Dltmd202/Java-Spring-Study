@@ -21,3 +21,7 @@
 
 ### 값 타입
 * [값 타입](./ValueType)
+
+### 객체지향 쿼리 언어
+* [기본 문법](./BasicQuerySyntex)
+* [중급 문법](./MiddleQuerySyntex)
