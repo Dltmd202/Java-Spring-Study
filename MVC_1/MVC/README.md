@@ -90,7 +90,7 @@ View로 이동하는 코드가 항상 중복호출되어야 한다. 물론 메�
 
 * prefix: `/WEB-INF/views/`
 * suffix: `.jsp`
-  rmflrh jsp가 아닌 thymeleaf 같은 다른 뷰로 변경한다면 전체 코드를 다 변경해야 한다.
+   jsp가 아닌 thymeleaf 같은 다른 뷰로 변경한다면 전체 코드를 다 변경해야 한다.
 
 ### 사용하지 않는 코드
 
