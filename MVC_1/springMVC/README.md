@@ -127,3 +127,165 @@
 * 스프링MVC는 `DispatcherServlet` 의 부모인 `FrameworkServlet` 에서 `service()` 를 오버라이드 해두었다.
 * `FrameworkServlet.service()` 를 시작으로 여러 메서드가 호출되면서 `DispatcherServlet.doDispatch()` 가 호출된다.
 
+## 핸들러 매핑과 핸들러 어댑터
+
+지금은 전혀 사용하지 않지만, 과거에 주로 사용했던 스프링이 제공하는 간단한 컨트롤러를 핸들러 매핑과 어댑터
+
+### Controller 인터페이스
+
+* 과거 버전 스프링 컨트롤러
+
+```java
+import org.springframework.web.servlet.ModelAndView;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+public interface Controller {
+    
+  ModelAndView handleRequest(HttpServletRequest request, HttpServletResponse response) throws Exception;
+  
+}
+```
+
+> 참고
+> 
+> Controller 인터페이스는 `@Controller` 애노테이션과는 전혀 다르다.
+
+```java
+package com.example.servlet3.web.springmvc.old;
+
+import org.springframework.stereotype.Component;
+import org.springframework.web.servlet.ModelAndView;
+import org.springframework.web.servlet.mvc.Controller;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+@Component("/springmvc/old-controller")
+public class OldController implements Controller {
+
+    @Override
+    public ModelAndView handleRequest(HttpServletRequest request, HttpServletResponse response) throws Exception {
+        System.out.println("OldController.handleRequest");
+        return null;
+    }
+}
+
+```
+
+이 컨트롤러가 호출되려면 2가지가 필요하다.
+
+* `HandlerMapping`
+  * 핸들러 매핑에서 이 컨트롤러를 찾을 수 있어야 한다.
+  * 스프링 빈의 이름으로 핸들러를 찾을 수 있는 핸들러가 필요하다.
+
+* `HandlerAdapter`
+  * 핸들러 매핑을 통해서 찾은 핸들러를 실행할 수 있는 핸들러 어댑터가 필요하다.
+
+* 스프링 부트가 자동으로 등록하는 핸들러 매핑과 핸들러 어댑터
+
+HandlerMapping
+```text
+0 = RequestMappingHandlerMapping : 애노테이션 기반의 컨트롤러인 @RequestMapping
+1 = BeanNameUrlHandlerMapping : 스프링 빈의 이름으로 핸들러를 찾는다.
+```
+
+HandlerAdapter
+```text
+0 = RequestMappingHandlerAdapter : 애노테이션 기반의 컨트롤러인 @RequestMapping에서 사용
+1 = HttpRequestHandlerAdapter : HttpReqeustHandler 처리
+2 = SimpleControllerHandlerAdapter : Controllerr 인터페이스(애노테이션x, 과거에 사용) 처리
+```
+
+1 핸들러 매핑으로 핸들러 조회
+
+  `HandlerMapping` 을 순서대로 실행해서, 핸들러를 찾는다.
+  이 경우 빈 이름으로 핸들러를 찾아야 하기 때문에 이름 그대로 빈 이름으로 핸들러를 찾아주는
+  `BeanNameUrlHandlerMapping` 가 실행헤 성공하고 핸들러인 `OldController`를 반환한다.
+
+2. 핸들러 어댑터 조회
+
+  `HandlerAdapter` 의 `support()` 를 순서대로 호출한다.
+  `SimpleControllerHandlerAdapter` 가 `Controller` 인터페이스를 지원하므로 대상이 된다.
+  
+3. 핸들러 어댑터의 실행
+   
+  디스패터 서블릿이 조회한 `SimpleControllerHandlerAdapter` 를 실행하면서 핸들러 정보도 함께 넘겨준다.
+  `SimpleControllerHandlerAdapter` 는 핸들러인 `OldController` 를 내부에서 실행하고, 그 결과를 반환한다.
+  
+### 뷰 리졸버 - InternalResourceViewResolver
+
+스프링 부트는 `InternalResourceViewResolver` 라는 뷰 리졸버를 자동으로
+등록하는데, 이때 `application.properties` 에 등록한 `spring.mvc.view.prefix`
+, `spring.mvc.view.suffix` 설정 정보를 사용해서 등록한다.
+
+```java
+package com.example.servlet3;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.web.servlet.ServletComponentScan;
+import org.springframework.context.annotation.Bean;
+import org.springframework.web.servlet.ViewResolver;
+import org.springframework.web.servlet.view.InternalResourceViewResolver;
+
+@ServletComponentScan
+@SpringBootApplication
+public class Servlet3Application {
+
+	public static void main(String[] args) {
+		SpringApplication.run(Servlet3Application.class, args);
+	}
+	
+    // 해당 코드와 같음 
+	@Bean
+	ViewResolver internalResourceViewResolver() {
+		return new InternalResourceViewResolver("/WEB-INF/views/", ".jsp");
+	}
+
+}
+```
+
+
+스프링 부트가 자동으로 등록하는 뷰 리졸버
+
+```text
+1 = BeanNameViewResolver : 빈 이름으로 뷰를 찾아서 반환한다. (예: 엑셀 파일 생성 기능에 사용)
+2 = InternalResourceViewResolver : JSP를 처리할 수 있는 뷰를 반환한다.
+```
+
+1. 핸들러 어댑터 호출
+   핸들러 어댑터를 통해 `new-form` 이라는 논리 이름을 획득한다.
+
+2. ViewResolver 호출
+   * `new-from` 이라는 뷰 이름으로 `viewResolver`를 순서대로 호출한다.
+   * `BeanNameViewResolver` 는 `new-form` 이라는 이름의 스프링 빈으로 등록된 뷰를 찾아야 하는데 없다.
+   * `InternalResourceViewResolver` 가 호출된다.
+
+3. InternalResourceViewResolver
+  이 뷰 리졸버는 `InternalResourceViewResolver` 를 반환한다.
+
+4. 뷰 - `InternalResourceView`
+
+  `InternalResourceView` 는 JSP처럼 포워드 `forword()` 를 사용해서 JSP를 실행한다.
+  
+5. view.render()
+  `view.render()` 가 호출되고 `InternalResourceView` 는 `forword()` 를 사용해서 JSP를 실행시킨다.
+
+> 참고
+> 
+> `InternalResourceViewResolver` 는 만약 JSTL 라이브러리가 있으면 `InternalResourceView` 를 상속받은
+> `JstlVie` 를 반환한다. `JstlView` 는 JSTL 태그 사용시 약간의 부가 기능이 추가된다.
+
+> 참고
+> 
+> 다른 뷰는 실제 뷰를 렌더링하니잠 JSP의 경우 `forword()` 통해서 해당 JSP로 이동해야 렌더링된다. JSP를 
+> 제외한 나머지 뷰 템플릿들은 `forword()` 과정 없이 바로 렌더링 된다.
+
+
+> 참고
+> 
+> Thymeleaf 뷰 템플릿을 사용하면 `ThymleafViewResolver` 를 동록해야 한다. 최근에는 라이브러리만 추가하면
+> 스프링 부트가 이런 작업도 모두 자동화해준다.
+
