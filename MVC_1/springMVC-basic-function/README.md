@@ -210,6 +210,85 @@ HTTP 요청의 Accept 헤더를 기반으로 미디어 타입으로 매핑한다
 * 회원 삭제 : DELTE `/users/{userId}`
 
 
+
+
+### HTTP 요청 - 기본, 헤더 조회
+
+#### RequestHeaderController
+
+```java
+package hello.springmvc.basic.request;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpMethod;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.util.Locale;
+
+@Slf4j
+@RestController
+public class RequestHeaderController {
+
+    @RequestMapping("/headers")
+    public String headers(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            HttpMethod httpMethod,
+            Locale locale,
+            @RequestHeader MultiValueMap<String, String> headerMap,
+            @RequestHeader("host") String host,
+            @CookieValue(value = "myCookie", required = false) String cookie
+            ){
+        log.info("request={}", request);
+        log.info("response={}", response);
+        log.info("httpMethod={}", httpMethod);
+        log.info("locale={}", locale);
+        log.info("headerMap={}", headerMap);
+        log.info("host={}", host);
+        log.info("cookie={}", cookie);
+        return "ok";
+    }
+}
+```
+
+* HttpServletRequest
+* HttpServletResponse
+* HttpMethod : HTTP 메서드를 조회한다. org.springframework.http.HttpMethod
+* Local: Locale 정보를 조회한다.
+* @RequestHeader MultiValueMap<String, String> headerMap
+  * 모든 HTTP 헤더를 MultiValueMap 형식으로 조회한다.
+* @RequestHeader("host") String host
+  * 특정 HTTP 헤더를 조회한다.
+  * 속성
+    * 필수 값 여부 : required
+    * 기본 값 속성 : defaultValue
+* @CookieValue(value = "myCookie", required = false) String cookie
+  * 특정 쿠키를 조회한다.
+  * 속성
+    * 필수 값 여부 : requried
+    * 기본 값 : defaultValue
+
+MultiValueMap
+
+* MAP과 유사한데, 하나의 키에 여러 값을 받을 수 있다.
+* HTTP header, HTTP 쿼리 파라미터와 같이 하나의 키에 여러 값을 받을 때 사용한다.
+  * keyA=value1&keyA=value2
+
+```java
+MultiValueMap<String, String> map = new LinkedMultiValueMap();
+map.add("keyA", "value1");
+map.add("keyA", "value2");
+
+//[value1,value2]
+List<String> values = map.get("keyA");
+```
+
 ## HTTP 요청 파라미터 - 쿼리 파라미터, HTML Form
 
 ### HTTP 요청 데이터 조회 - 개요
@@ -236,6 +315,184 @@ HTTP 요청의 Accept 헤더를 기반으로 미디어 타입으로 매핑한다
 
 `HttpServletRequest` 의 `request.getParameter()` 를 사용하면 다음 두 가지 요청 파라미터를 조회할 수 있다.
 
-### GET, 쿼리 파라미터 전송
+```java
+/**
+ * @ResponseBody -> @RestController
+ */
+@ResponseBody
+@RequestMapping("/request-param-v2")
+public String requestParamV2(
+        @RequestParam("username") String memberName,
+        @RequestParam("age") int memberAge
+){
+    log.info("username = {}, age = {}", memberName, memberAge);
+    return "ok";
+}
+```
 
+* `@RequestParam` : 파라미터 이름으로 바인딩
+* `@ResponseBody` : View 조회를 무시하고, HTTP message body에 직접 해당 내용 입력
+
+`@RequestParam` 의 name(value) 속성이 파라미터 이름으로 사용
+
+* `@RequestParam("username") String memberName`
+* -> `request.getParameter("username")`
+
+```java
+@ResponseBody
+@RequestMapping("/request-param-v4")
+public String requestParamV4(String username, int age){
+    log.info("username = {}, age = {}", username, age);
+    return "ok";
+}
+```
+
+`String`, `int`, `Integar` 등의 단순 타입이면 `@RequestParam` 도 생략 가능
+
+> 참고
+> 
+> 이렇게 애노테이션을 완전히 생략해도 되는데, 너무 없는 것도 약간 과할 수 있다.
+> `@RequestParam`이 있으면 명확하게 요청 파라미터에서 데이터를 읽는 다는 것을 알 수 있다.
+
+
+```java
+@ResponseBody
+@RequestMapping("/request-param-required")
+public String requestParamRequired(
+        @RequestParam(required = true) String username,
+        @RequestParam int age){
+    log.info("username = {}, age = {}", username, age);
+    return "ok";
+}
+```
+
+* `@RequestParam.required`
+  * 파라미터 필수 여부
+  * 기본값이 파라미터 필수(`true`) 이다.
+
+* /request-param 요청
+  * username 이 없으므로 400 예외가 발생 
+  
+> 주의
+> 
+> 파라미터 이름만 사용
+> 
+> `/request-param?username=`
+> 파라미터 이름만 있고 값이 없는 경우 -> 빈문자로 통과
+> 
+> 
+> 기본형(primitive) 에 null 입력
+> 
+> `/request-param` 요청
+> `@RequestParam(required = false) int age`
+
+
+```java
+@ResponseBody
+@RequestMapping("/request-param-default")
+public String requestParamDefault(
+        @RequestParam(required = true, defaultValue = "guest") String username,
+        @RequestParam(required = false, defaultValue = "-1") int age){
+    log.info("username = {}, age = {}", username, age);
+    return "ok";
+}
+```
+
+파라미터 값이 없는 경우 `defaultValue` 를 사용하면 기본 값을 적용할 수 있다.
+이미 기본 값이 있기 때문에 `required`는 의미가 없다.
+
+`defaultValue`는 빈 문자의 경우에도 설정한 기본 값이 적용된다.
+`/request-param?username=`
+
+### 파라미터를 Map으로 조회하기 - requestParamMap
+
+```java
+@ResponseBody
+@RequestMapping("/request-param-map")
+public String requestParamMap(
+        @RequestParam Map<String, Object> paramMap
+){
+    log.info("username = {}, age = {}", paramMap.get("username"), paramMap.get("age"));
+    return "ok";
+}
+```
+
+파라미터를 Map, MultiValueMap 으로 조회할 수 있다.
+
+* `@RequestParam Map`
+  * `Map<key=value>`
+* `@RequestParam MultiValueMap`
+  * `MultiValueMap<key=[val1, val2, ...]`
+
+
+## HTTP 요청 파라미터 - @ModelAttribute
+
+#### 바인딩 받을 객체 - `HelloData`
+
+```java
+package hello.springmvc.basic;
+
+import lombok.Data;
+
+@Data
+public class HelloData {
+    private String username;
+    private int age;
+}
+```
+
+* 롬복 `@Data`
+  * `@Getter`, `@Setter`, `@ToString`, `@EqualsAndHashCode`, `@RequiredArgsConstructor` 를 자동으로 적용해준다.
+
+
+```java
+@ResponseBody
+@RequestMapping("/model-attribute-v1")
+public String modelAttributeV1(
+        @ModelAttribute HelloData helloData
+){
+    log.info("username = {}, age = {}",
+            helloData.getUsername(), helloData.getAge());
+    return "ok";
+}
+```
+
+HelloData 객체가 생성되고, 요청 파라미터의 값도 모두 들어가 있다.
+
+스프링MVC는 @ModelAttribute 가 있으면 다음을 실행한다.
+
+* HelloData 객체를 생성한다.
+* 요청 파라미터의 이름으로 `HelloData` 객체의 프로퍼티를 찾는다. 그리고 해당 프로퍼티의 `setter` 를 호출해서 파라미터의 값을 입력 한다.
+* 파라미터의 이름이 `username` 이면 `setUsername()` 메서드를 찾아서 호출하면서 값을 입력한다.
+
+#### 프로퍼티
+
+객체에 `getUsername()`, `setUsername()` 메서드가 있으면, 이 객체는 `username` 이라는 프로퍼티를 가지고 있다.
+`username` 프로퍼티의 값을 변경하면 `setUsername()` 이 호출되고, 조회하면 `getUsername()` 이 호출된다.
+
+#### 바인딩 오류
+
+`age=abd` 처럼 숫자가 들어가야 할 곳에 문자를 넣으면 `BindException` 이 발생한다.
+
+
+### ModelAttribute 생략
+
+```java
+@ResponseBody
+@RequestMapping("/model-attribute-v2")
+public String modelAttributeV2(
+      HelloData helloData
+      ){
+      log.info("username = {}, age = {}",
+      helloData.getUsername(), helloData.getAge());
+      return "ok";
+}
+```
+
+`@ModelAttribute` 는 생략할 수 있다. 그런데 `@RequestParam` 도 생략할 수 있으니 혼란스러울 수 있다.
+
+스프링은 해당 생략시 다음과 같은 규칙을 적용한다.
+
+* `String`, `int`, `Integer` 같은 단순 타입 = `@RequestParam`
+* 나머지 = `@ModelAttribute` (argument resolver 로 지정해준 타입 외)
 
