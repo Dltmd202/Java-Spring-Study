@@ -113,3 +113,41 @@ List<Member> findByUsernameAndAgeGreaterThan(String username, int age);
 > 그렇지 않으면 애플리케이션을 시작하는 시점에 오류가 발생한다.
 > 이렇게 애플리케이션 로딩 시점에 오류를 인지할 수 있는 것이 스프링 데이터 JPA의 매우 큰 장점이다.
 
+## @Query, 값, DTO 조회하기
+
+#### 단순히 값 하나를 조회
+
+```java
+@Query("select m.username from Member m")
+List<String> findUsernameList();
+```
+
+#### 파라미터 바인딩
+
+```java
+import org.springframework.data.repository.query.Param;
+
+public interface MemberRepository extends JpaRepository<Member, Long> {
+    @Query("select m from Member m where m.username = :name")
+    Member findMembers(@Param("name") String username);
+}
+```
+
+#### 컬렉션 파라미터 바인딩
+
+`Collection` 타입으로 in절 지원
+
+```java
+@Query("select m from Member m where m.username in :names")
+List<Member> findByNames(@Param("names") List<String> names);
+```
+
+#### 반환 타입
+
+스프링 데이터 JPA는 유연한 반환 타입 지원
+
+```java
+List<Member> findByUsername(String name); //컬렉션 
+Member findByUsername(String name); //단건
+Optional<Member> findByUsername(String name); //단건 Optional
+```
