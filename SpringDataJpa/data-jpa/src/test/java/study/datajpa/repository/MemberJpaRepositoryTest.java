@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 import study.datajpa.entity.Member;
+import study.datajpa.entity.Team;
 
 import java.util.List;
 
@@ -86,6 +87,55 @@ class MemberJpaRepositoryTest {
 
         //then
         assertThat(findMember).isEqualTo(m1);
+    }
+
+    @Test
+    public void paging() throws Exception{
+        //given
+        memberJpaRepository.save(new Member("member1", 10));
+        memberJpaRepository.save(new Member("member2", 10));
+        memberJpaRepository.save(new Member("member3", 10));
+        memberJpaRepository.save(new Member("member4", 10));
+        memberJpaRepository.save(new Member("member5", 10));
+
+        //when
+        int age = 10;
+        int offset = 0;
+        int limit = 3;
+        List<Member> members = memberJpaRepository.findByPage(age, offset, limit);
+        long total = memberJpaRepository.totalCount(age);
+
+        //then
+        assertThat(members.size()).isEqualTo(3);
+        assertThat(total).isEqualTo(5);
+    }
+
+    @Test
+    public void bulkUpdate() throws Exception{
+        //given
+        memberJpaRepository.save(new Member("member1", 10));
+        memberJpaRepository.save(new Member("member2", 19));
+        memberJpaRepository.save(new Member("member3", 20));
+        memberJpaRepository.save(new Member("member4", 21));
+        memberJpaRepository.save(new Member("member5", 40));
+
+        //when
+        int resultCount = memberJpaRepository.bulkAgePlus(20);
+
+        //then
+        assertThat(resultCount).isEqualTo(3);
+    }
+
+    @Test
+    public void findMemberLazy() throws Exception{
+        //given
+        Team teamA = new Team("teamA");
+        Team teamB = new Team("teamB");
+
+
+        //when
+
+        //then
     }
 
 }
