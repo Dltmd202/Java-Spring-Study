@@ -167,3 +167,61 @@ HTML문서는 <,> 같은 특수문자를 기반으로 정의된다.
  <span th:text="${#temporals.format(localDateTime, 'yyyy-MM-dd HH:mm:ss')}"></
     span>
 ```
+
+### 단순한 URL
+
+* `@{/hello}` -> `/hello`
+
+### 쿼리 파라미터
+
+* `@{/hello(param1=${param1}, param2=${param2})}` 
+  * `/hello?param1=data1&param2=data2`
+  * `()` 에 있는 부분은 쿼리 파라미터로 처리된다.
+
+### 경로 변수
+
+* `@{/hello/{param1}/{param2}(param1=${param1}, param2=${param2})}` 
+  * `/hello/data1/data2` 
+  * URL 경로상에 변수가 있으면 `()` 부분은 경로 변수로 처리된다.
+
+### 경로 변수 + 쿼리 파라미터
+
+* `@{/hello/{param1}(param1=${param1}, param2=${param2})}`
+  * `/hello/data1?param2=data2`
+  * 경로 변수와 쿼리 파라미터를 함께 사용할 수 있다.
+
+
+### 리터럴
+
+타임리프는 다음과 같은 리터럴이 있다.
+
+* 문자: `'hello' `
+* 숫자: `10` 
+* 불린: `true` , `false` 
+* null: `null`
+
+타임리프에서 문자 리터럴은 항상 `'` (작은 따옴표)로 감싸야 한다.
+하지만 공백없이 쭉 이어진다면 하나의 의미있는 토큰으로 인지해서 다음과 같이 작은 따옴표를 생략할 수 있다.
+
+
+`<span th:text="hello">`
+
+#### 오류
+
+`<span th:text="hello world!"></span>`
+
+문자 리터럴은 원칙상 `'` 로 감싸야 한다. 중간에 공백이 있어서 하나의 의미있는 토큰으로도 인식되지
+않는다.
+
+#### 수정
+`<span th:text="'hello world!'"></span>`
+
+
+이렇게 `'` 로 감싸면 정상 동작한다.
+
+### 연산
+* 비교연산: HTML 엔티티를 사용해야 하는 부분을 주의하자,
+  * `>` (gt), `<` (lt), `>=` (ge), `<=` (le), `!` (not), `==` (eq), `!=` (neq, ne)
+* 조건식: 자바의 조건식과 유사하다. 
+* Elvis 연산자: 조건식의 편의 버전 
+* No-Operation: `_` 인 경우 마치 타임리프가 실행되지 않는 것 처럼 동작한다. 이것을 잘 사용하면 HTML 의 내용 그대로 활용할 수 있다. 마지막 예를 보면 데이터가 없습니다. 부분이 그대로 출력된다.
