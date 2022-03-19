@@ -702,3 +702,218 @@ public String addItemV6(@Validated @ModelAttribute Item item,
 > `@Valid` 는 자바 표준 검증 애노테이션이다.
 
 
+## Bean Validation
+
+### Bean Validation 의존관계 추가
+
+#### `build.gradle`
+
+```java
+implementation 'org.springframework.boot:spring-boot-starter-validation'
+```
+
+
+#### `Item`
+
+```java
+package hello.itemservice.domain.item;
+
+import lombok.Data;
+import org.hibernate.validator.constraints.Range;
+
+import javax.validation.constraints.Max;
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.NotNull;
+
+@Data
+public class Item {
+
+    private Long id;
+
+    @NotBlank
+    private String itemName;
+
+    @NotNull
+    @Range(min = 1000, max = 1000000)
+    private Integer price;
+
+    @NotNull
+    @Max(9999)
+    private Integer quantity;
+
+    public Item() {
+    }
+
+    public Item(String itemName, Integer price, Integer quantity) {
+        this.itemName = itemName;
+        this.price = price;
+        this.quantity = quantity;
+    }
+}
+```
+
+#### 검증 애노테이션
+
+`@NotBlank` : 빈값 + 공백만 있는 경우를 허용하지 않는다.
+`@NotNull` : null 을 허용하지 않는다.
+`@Range(min = 1000, max = 1000000)` : 범위 안의 값이어야 한다. 
+`@Max(9999)` : 최대 9999까지만 허용한다.
+
+> 참고
+> 
+> `javax.validation.constraints.NotNull`
+> `org.hibernate.validator.constraints.Range`
+>
+> `javax.validation` 으로 시작하면 특정 구현에 관계없이 제공되는 표준 인터페이스이고,
+> `org.hibernate.validator` 로 시작하면 하이버네이트 `validator` 구현체를 사용할 때만 제공되는 검증 기능이다. 
+
+#### 검증기 생성
+
+```java
+ValidatorFactory factory = Validation.buildDefaultValidatorFactory();
+Validator validator = factory.getValidator();
+```
+
+
+#### 검증 실행
+
+검증 대상(`item`)을 직접 검증기에 넣고 그 결과를 받는다. `Set` 에는 `ConstraintViolation` 이라는 검증 오류가 담긴다. 
+따라서 결과가 비어있으면 검증 오류가 없는 것이다.
+
+```java
+Set<ConstraintViolation<Item>> violations = validator.validate(item);
+```
+
+
+#### 실행결과
+
+```java
+violation = ConstraintViolationImpl{interpolatedMessage='공백일 수 없습니다', propertyPath=itemName, rootBeanClass=class hello.itemservice.domain.item.Item, messageTemplate='{javax.validation.constraints.NotBlank.message}'}
+violation.getMessage() = 공백일 수 없습니다
+violation = ConstraintViolationImpl{interpolatedMessage='9999 이하여야 합니다', propertyPath=quantity, rootBeanClass=class hello.itemservice.domain.item.Item, messageTemplate='{javax.validation.constraints.Max.message}'}
+violation.getMessage() = 9999 이하여야 합니다
+violation = ConstraintViolationImpl{interpolatedMessage='1000에서 1000000 사이여야 합니다', propertyPath=price, rootBeanClass=class hello.itemservice.domain.item.Item, messageTemplate='{org.hibernate.validator.constraints.Range.message}'}
+violation.getMessage() = 1000에서 1000000 사이여야 합니다
+```
+
+#### 스프링 MVC의 Bean Validator
+
+스프링 부트가 `spring-boot-starter-validation` 라이브러리를 넣으면 자동으로 
+Bean Validator를 인지하고 스프링에 통합한다.
+
+#### 스프링 부트는 자동으로 글로벌 Validator로 등록한다.
+
+`LocalValidatorFactoryBean` 을 글로벌 `Validator`로 등록한다. 이 Validator는 `@NotNull` 
+같은 애노테이션을 보고 검증을 수행한다. 이렇게 글로벌 Validator가 적용되어 있기 때문에, `@Valid` , `@Validated` 만 적용하면 된다.
+검증 오류가 발생하면, `FieldError` , `ObjectError` 를 생성해서 `BindingResult` 에 담아준다.
+
+
+> 주의!
+> 
+> 다음과 같이 직접 글로벌 `Validator`를 직접 등록하면 스프링 부트는 Bean Validator를 글로벌 `Validator` 로 등록하지 않는다.
+> 따라서 애노테이션 기반의 빈 검증기가 동작하지 않는다. 
+
+
+> 참고
+> 
+> 검증시 `@Validated` `@Valid` 둘다 사용가능하다.
+> `javax.validation.@Valid` 를 사용하려면 `build.gradle` 의존관계 추가가 필요하다.
+> `implementation 'org.springframework.boot:spring-boot-starter-validation'`
+> `@Validated` 는 스프링 전용 검증 애노테이션이고, `@Valid` 는 자바 표준 검증 애노테이션이다. 둘중 
+> 아무거나 사용해도 동일하게 작동하지만, `@Validated` 는 내부에 `groups` 라는 기능을 포함하고 있다.
+
+
+#### 검증 순서
+
+1. `@ModelAttribute` 각각의 필드에 타입 변환 시도 
+   1. 성공하면 다음으로
+   2. 실패하면 `typeMismatch` 로 `FieldError` 추가 
+2. Validator 적용
+
+
+#### 바인딩에 성공한 필드만 Bean Validation 적용
+
+`BeanValidator`는 바인딩에 실패한 필드는 `BeanValidation`을 적용하지 않는다.
+생각해보면 타입 변환에 성공해서 바인딩에 성공한 필드여야 `BeanValidation` 적용이 의미 있다. 
+(일단 모델 객체에 바인딩 받는 값이 정상으로 들어와야 검증도 의미가 있다.)
+
+`@ModelAttribute` -> 각각의 필드 타입 변환시도  -> 변환에 성공한 필드만 `BeanValidation` 적용
+
+### Bean Validation - 에러 코드
+
+Bean Validation을 적용하고 `bindingResult` 에 등록된 검증 오류 코드를 보면
+오류 코드가 애노테이션 이름으로 등록된다. 마치 `typeMismatch` 와 유사하다.
+
+`NotBlank` 라는 오류 코드를 기반으로 `MessageCodesResolver` 를 통해 다양한 메시지 코드가 순서대로 생성된다.
+
+#### @NotBlank
+* NotBlank.item.itemName 
+* NotBlank.itemName 
+* NotBlank.java.lang.String 
+* NotBlank
+
+
+#### @Range
+* Range.item.price 
+* Range.price 
+* Range.java.lang.Integer 
+* Range
+
+#### 메시지 등록
+
+##### `errors.properties`
+
+```properties
+#Bean Validation 추가 
+NotBlank={0} 공백X
+Range={0}, {2} ~ {1} 허용
+Max={0}, 최대 {1}
+```
+
+`{0}` 은 필드명이고, `{1}` , `{2}` ...은 각 애노테이션 마다 다르다.
+
+#### BeanValidation 메시지 찾는 순서
+
+1. 생성된 메시지 코드 순서대로 messageSource 에서 메시지 찾기
+2. 애노테이션의 message 속성 사용 @NotBlank(message = "공백! {0}") 
+3. 라이브러리가 제공하는 기본 값 사용 공백일 수 없습니다.
+
+
+### Bean Validation - 오브젝트 오류
+
+Bean Validation에서 특정 필드( `FieldError` )가 아닌 해당 오브젝트 관련 오류( `ObjectError` )는 어떻게 처리는
+다음과 같이 `@ScriptAssert()` 를 사용한다.
+
+```java
+@Data
+@ScriptAssert(lang = "javascript", script = "_this.price * _this.quantity >= 10000",
+        message = "금액의 총합이 10000원 넘게 주문해주세요")
+public class Item {
+
+    private Long id;
+
+    @NotBlank
+    private String itemName;
+
+    @NotNull
+    @Range(min = 1000, max = 1000000)
+    private Integer price;
+
+    @NotNull
+    @Max(9999)
+    private Integer quantity;
+    
+  ...
+}
+```
+
+#### 메시지 코드
+* ScriptAssert.item
+* ScriptAssert
+
+그런데 실제 사용해보면 제약이 많고 복잡하다. 그리고 실무에서는 검증 기능이 해당 객체의 범위를 넘어서는 경우들도 종종 등장하는데, 그런 경우 대응이 어렵다.
+
+따라서 오브젝트 오류(글로벌 오류)의 경우 `@ScriptAssert` 을 억지로 사용하는 것 보다는 다음과 같이 
+오브젝트 오류 관련 부분만 직접 자바 코드로 작성하는 것을 권장한다.
+
+
