@@ -917,3 +917,135 @@ public class Item {
 오브젝트 오류 관련 부분만 직접 자바 코드로 작성하는 것을 권장한다.
 
 
+### Bean Validation - 수정에 적용
+
+#### `ValidationItemControllerV3` - `edit()`
+
+
+```java
+@PostMapping("/{itemId}/edit")
+public String edit(@PathVariable Long itemId, @Validated @ModelAttribute Item item, BindingResult bindingResult) {
+
+    if (item.getPrice() != null && item.getQuantity() != null) {
+        int resultPrice = item.getPrice() * item.getQuantity();
+        if (resultPrice < 10000) {
+            bindingResult.reject("totalPriceMin", new Object[]{10000,
+                    resultPrice}, null);
+        }
+    }
+
+    if (bindingResult.hasErrors()){
+        log.info("errors = {}", bindingResult);
+        return "validation/v3/editForm";
+    }
+
+    itemRepository.update(itemId, item);
+    return "redirect:/validation/v3/items/{itemId}";
+}
+```
+
+
+* `edit()` : Item 모델 객체에 @Validated 를 추가하자. 
+* 검증 오류가 발생하면 editForm 으로 이동하는 코드 추가
+
+### Bean Validation - 한계
+
+데이터를 등록할 때와 수정할 때는 요구사항이 다를 수 있다.
+
+
+#### 등록시 기존 요구사항
+* 타입 검증
+  * 가격, 수량에 문자가 들어가면 검증 오류 처리
+
+* 필드 검증
+  * 상품명: 필수, 공백X
+  * 가격: 1000원 이상, 1백만원 이하
+  * 수량: 최대 9999
+
+* 특정 필드의 범위를 넘어서는 검증
+  * 가격 * 수량의 합은 10,000원 이상
+
+#### 수정시 요구사항
+
+* 등록시에는 `quantity` 수량을 최대 9999까지 등록할 수 있지만 **수정시에는 수량을 무제한**으로 변경할 수 있다.
+* 등록시에는 `id` 에 값이 없어도 되지만, **수정시에는 id 값이 필수**이다.
+
+### Bean Validation - groups
+
+동일한 모델 객체를 등록할 때와 수정할 때 각각 다르게 검증하는 방법
+
+* BeanValidation의 groups 기능을 사용한다.
+* Item을 직접 사용하지 않고, ItemSaveForm, ItemUpdateForm 같은 폼 전송을 위한 별도의 모델 객체를 만들어서 사용한다.
+
+#### groups 적용
+
+
+#### 저장용
+
+```java
+package hello.itemservice.domain.item;
+
+public interface SaveCheck {
+}
+```
+
+
+#### 수정용
+
+```java
+package hello.itemservice.domain.item;
+
+public interface UpdateCheck {
+}
+```
+
+#### Item - groups 적용
+
+```java
+
+
+@PostMapping("/add")
+public String addItem2(@Validated(SaveCheck.class) @ModelAttribute Item item,
+        BindingResult bindingResult,
+        RedirectAttributes redirectAttributes, Model model) {
+
+        if (item.getPrice() != null && item.getQuantity() != null) {
+        int resultPrice = item.getPrice() * item.getQuantity();
+        if (resultPrice < 10000) {
+        bindingResult.reject("totalPriceMin", new Object[]{10000,
+        resultPrice}, null);
+        }
+        }
+
+        if(bindingResult.hasErrors()){
+        log.info("errors = {}", bindingResult);
+        return "validation/v3/addForm";
+        }
+
+        Item savedItem = itemRepository.save(item);
+        redirectAttributes.addAttribute("itemId", savedItem.getId());
+        redirectAttributes.addAttribute("status", true);
+        return "redirect:/validation/v3/items/{itemId}";
+        }
+
+    @PostMapping("/{itemId}/edit")
+    public String edit2(@PathVariable Long itemId, @Validated(UpdateCheck.class) @ModelAttribute Item item, BindingResult bindingResult) {
+
+        if (item.getPrice() != null && item.getQuantity() != null) {
+            int resultPrice = item.getPrice() * item.getQuantity();
+            if (resultPrice < 10000) {
+                bindingResult.reject("totalPriceMin", new Object[]{10000,
+                        resultPrice}, null);
+            }
+        }
+
+        if (bindingResult.hasErrors()){
+            log.info("errors = {}", bindingResult);
+            return "validation/v3/editForm";
+        }
+
+        itemRepository.update(itemId, item);
+        return "redirect:/validation/v3/items/{itemId}";
+    }
+```
+

@@ -26,8 +26,8 @@
 
         <div th:if="${errors?.containsKey('globalError')}">
             <p class="field-error" th:text="${errors['globalError']}">전체 오류 메시지</p>
-
         </div>
+
         <div>
             <label for="itemName" th:text="#{label.item.itemName}">상품명</label>
             <input type="text" id="itemName" th:field="*{itemName}" class="form-control"
