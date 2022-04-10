@@ -568,3 +568,187 @@ BasicErrorController가 제공하는 기본 정보들
 에러 공통 처리 컨트롤러의 기능을 변경하고 싶으면 `ErrorController` 인터페이스를 상속 받아서 
 구현하거나 `BasicErrorController` 상속 받아서 기능을 추가하면 된다.
 
+## API 예외
+
+#### `WebServerCustomizer`
+
+```java
+package hello.exception;
+
+import org.springframework.boot.web.server.ConfigurableWebServerFactory;
+import org.springframework.boot.web.server.ErrorPage;
+import org.springframework.boot.web.server.WebServerFactoryCustomizer;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
+
+@Component
+public class WebServerCustomizer implements WebServerFactoryCustomizer<ConfigurableWebServerFactory> {
+
+
+    @Override
+    public void customize(ConfigurableWebServerFactory factory) {
+
+        ErrorPage errorPage404 = new ErrorPage(HttpStatus.NOT_FOUND, "/error-page/404");
+        ErrorPage errorPage500 = new ErrorPage(HttpStatus.INTERNAL_SERVER_ERROR, "/error-page/500");
+        ErrorPage errorPageEx = new ErrorPage(RuntimeException.class, "/error-page/500");
+        factory.addErrorPages(errorPage404, errorPage500, errorPageEx);
+
+    }
+}
+```
+
+`response.sendError()` 가 호출되면 위에 등록한 예외 페이지 경로가 호출된다.
+
+
+#### ApiExceptionController
+
+```java
+package hello.exception.api;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RestController;
+
+@Slf4j
+@RestController
+public class ApiExceptionController {
+
+    @GetMapping("/api/members/{id}")
+    public MemberDto getMember(@PathVariable("id") String id){
+        if(id.equals("ex")){
+            throw new RuntimeException("잘못된 사용자");
+        }
+        return new MemberDto(id, "hello " + id);
+    }
+
+
+    @Data
+    @AllArgsConstructor
+    static class MemberDto{
+        private String memberId;
+        private String name;
+    }
+}
+```
+
+#### 정상 호출
+
+`http://localhost:8080/api/members/spring`
+
+```json
+{
+      "memberId": "spring",
+      "name": "hello spring"
+  }
+```
+
+#### 예외 발생 호출
+
+`http://localhost:8080/api/members/ex`
+
+```html
+<html>
+500에러~~
+</html>
+```
+
+오류 페이지 컨트롤러도 JSON 응답을 할 수 있도록 수정해야 한다.
+
+#### ErrorPageController
+
+```java
+package hello.exception.servlet;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+
+import javax.servlet.RequestDispatcher;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.util.HashMap;
+import java.util.Map;
+
+@Slf4j
+@Controller
+public class ErrorPageController {
+
+    //RequestDispatcher 상수로 정의되어 있음
+    public static final String ERROR_EXCEPTION = "javax.servlet.error.exception";
+    public static final String ERROR_EXCEPTION_TYPE = "javax.servlet.error.exception_type";
+    public static final String ERROR_MESSAGE = "javax.servlet.error.message";
+    public static final String ERROR_REQUEST_URI = "javax.servlet.error.request_uri";
+    public static final String ERROR_SERVLET_NAME = "javax.servlet.error.servlet_name";
+    public static final String ERROR_STATUS_CODE = "javax.servlet.error.status_code";
+    
+
+    @RequestMapping(value = "/error-page/500", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, Object>> errorPage500Api(
+            HttpServletRequest request, HttpServletResponse response
+    ){
+        Map<String, Object> result = new HashMap<>();
+        Exception ex = (Exception) request.getAttribute(ERROR_EXCEPTION);
+        result.put("status", request.getAttribute(ERROR_STATUS_CODE));
+        result.put("message", ex.getMessage());
+
+        Integer statusCode = (Integer) request.getAttribute(RequestDispatcher.ERROR_STATUS_CODE);
+
+        return new ResponseEntity<>(result, HttpStatus.valueOf(statusCode));
+    }
+
+    
+}
+```
+
+`produces = MediaType.APPLICATION_JSON_VALUE` 의 뜻은 클라이언트가 요청하는 HTTP Header의 `Accept` 의 값이 `application/json`
+일 때 해당 메서드가 호출된다는 것이다. 결국 클라어인트가 받고 싶은 미디어타입이 json이면 이 컨트롤러의 메서드가 호출된다.
+
+
+응답 데이터를 위해서 `Map` 을 만들고 `status` , `message` 키에 값을 할당했다. 
+Jackson 라이브러리는 `Map` 을 JSON 구조로 변환할 수 있다.
+
+### API 예외 처리 - 스프링 부트 기본 오류 처리
+
+#### BasicErrorController
+
+```java
+@RequestMapping(produces = MediaType.TEXT_HTML_VALUE)
+public ModelAndView errorHtml(HttpServletRequest request, HttpServletResponse response) {}
+
+@RequestMapping
+public ResponseEntity<Map<String, Object>> error(HttpServletRequest request) {}
+```
+
+`/error` 동일한 경로를 처리하는 `errorHtml()` , `error()` 두 메서드를 확인할 수 있다.
+
+* `errorHtml()` : `produces = MediaType.TEXT_HTML_VALUE` : 클라이언트 요청의 Accept 해더 값이 `text/html` 인 경우에는 
+  `errorHtml()` 을 호출해서 view를 제공한다.
+* `error()` : 그외 경우에 호출되고 `ResponseEntity` 로 HTTP Body에 JSON 데이터를 반환한다.
+
+
+`http://localhost:8080/api/members/ex`
+
+```json
+{
+    "timestamp": "2021-04-28T00:00:00.000+00:00", "status": 500,
+    "error": "Internal Server Error",
+    "exception": "java.lang.RuntimeException",
+    "trace": "java.lang.RuntimeException:...",
+    "message": "잘못된 사용자",
+      "path": "/api/members/ex"
+}
+```
+
+다음 옵션들을 설정하면 더 자세한 오류 정보를 추가할 수 있다.
+* server.error.include-binding-errors=always 
+* server.error.include-exception=true 
+* server.error.include-message=always 
+* server.error.include-stacktrace=always
+
+
