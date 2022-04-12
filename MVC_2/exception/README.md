@@ -902,3 +902,114 @@ public void extendHandlerExceptionResolvers(List<HandlerExceptionResolver> resol
 
 `configureHandlerExceptionResolvers(..)` 를 사용하면 스프링이 기본으로 등록하는 `ExceptionResolver` 가 제거되므로 주의, 
 `extendHandlerExceptionResolvers` 를 사용
+
+### API 예외 처리 - HandlerExceptionResolver 활용
+
+#### 예외를 여기서 마무리하기
+예외가 발생하면 WAS까지 예외가 던져지고, WAS에서 오류 페이지 정보를 찾아서 다시 `/error` 를 호출하는 과정은 생각해보면 너무 복잡하다. 
+`ExceptionResolver` 를 활용하면 예외가 발생했을 때 이런 복잡한 과정 없이 여기에서 문제를 깔끔하게 해결할 수 있다.
+
+#### UserException
+
+```java
+package hello.exception.exception;
+
+public class UserException extends RuntimeException{
+
+    public UserException() {
+        super();
+    }
+
+    public UserException(String message) {
+        super(message);
+    }
+
+    public UserException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
+    public UserException(Throwable cause) {
+        super(cause);
+    }
+
+    protected UserException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(message, cause, enableSuppression, writableStackTrace);
+    }
+}
+```
+
+#### ApiExceptionController - 예외 추가
+
+```java
+@GetMapping("/api/members/{id}")
+public MemberDto getMember(@PathVariable("id") String id){
+    if(id.equals("ex")){
+        throw new RuntimeException("잘못된 사용자");
+    }
+    if(id.equals("bad")){
+        throw new IllegalArgumentException("잘못된 입력값");
+    }
+    if(id.equals("user-ex")){
+        throw new UserException("사용자 오류");
+    }
+    return new MemberDto(id, "hello " + id);
+}
+```
+
+#### UserHandlerExceptionResolver
+
+```java
+package hello.exception.resolver;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import hello.exception.exception.UserException;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.servlet.HandlerExceptionResolver;
+import org.springframework.web.servlet.ModelAndView;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+
+@Slf4j
+public class UserHandlerExceptionResolver implements HandlerExceptionResolver {
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Override
+    public ModelAndView resolveException(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
+        try{
+            if(ex instanceof UserException){
+                log.info("UserException resolver to 400");
+                String accpetHeader = request.getHeader("accept");
+                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+
+                if("application/json".equals(accpetHeader)){
+                    Map<String, Object> errorResult = new HashMap<>();
+                    errorResult.put("ex", ex.getClass());
+                    errorResult.put("message", ex.getMessage());
+
+                    String result = objectMapper.writeValueAsString(errorResult);
+
+                    response.setContentType("application/json");
+                    response.setCharacterEncoding("utf-8");
+                    response.getWriter().write(result);
+
+                    return new ModelAndView();
+                } else {
+                    return new ModelAndView("error/500");
+                }
+            }
+        }catch (IOException e){
+            log.error("resollver ex", e);
+        }
+        return null;
+    }
+}
+```
+
+HTTP 요청 해더의 `ACCEPT` 값이 `application/json` 이면 JSON으로 오류를 내려주고, 
+그 외 경우에는 error/500에 있는 HTML 오류 페이지를 보여준다.
+
