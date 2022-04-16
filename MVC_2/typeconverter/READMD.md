@@ -331,3 +331,164 @@ public void ipPortToString() throws Exception {
 > 
 > 스프링은 문자, 숫자, 불린, Enum등 일반적인 타입에 대한 대부분의 컨버터를 기본으로 제공한다. 
 > IDE에서 `Converter` , `ConverterFactory` , `GenericConverter` 의 구현체를 찾아보면 수 많은 컨버터를 확인할 수 있다.
+
+### 컨버전 서비스 - ConversionService
+
+이렇게 타입 컨버터를 하나하나 직접 찾아서 타입 변환에 사용하는 것은 매우 불편하다. 
+그래서 스프링은 개별 컨버터를 모아두고 그것들을 묶어서 편리하게 사용할 수 있는 기능을 제공하는데, 이것이 바로 컨버전 서비스( `ConversionService` )이다.
+
+#### ConversionService 인터페이스
+
+```java
+package org.springframework.core.convert;
+
+import org.springframework.lang.Nullable;
+
+public interface ConversionService {
+    boolean canConvert(@Nullable Class<?> sourceType, Class<?> targetType);
+    boolean canConvert(@Nullable TypeDescriptor sourceType, TypeDescriptor targetType);
+    
+    <T> T convert(@Nullable Object source, Class<T> targetType);
+    
+    Object convert(@Nullable Object source, @Nullable TypeDescriptor sourceType, TypeDescriptor targetType);
+}
+```
+
+컨버전 서비스 인터페이스는 단순히 컨버팅이 가능한가? 확인하는 기능과, 컨버팅 기능을 제공한다.
+
+
+#### ConversionServiceTest - 컨버전 서비스 테스트 코드
+
+```java
+package hello.typeconverter.converter;
+
+import hello.typeconverter.type.IpPort;
+import org.assertj.core.api.Assertions;
+import org.junit.jupiter.api.Test;
+import org.springframework.core.convert.support.DefaultConversionService;
+
+import static org.assertj.core.api.Assertions.*;
+
+public class ConversionServiceTest {
+
+    @Test
+    public void conversionServicew() throws Exception {
+        //given
+        DefaultConversionService conversionService = new DefaultConversionService();
+
+        //when
+        conversionService.addConverter(new StringToIntegerConverter());
+        conversionService.addConverter(new IntegerToStringConverter());
+        conversionService.addConverter(new StringToIpPortConverter());
+        conversionService.addConverter(new IpPortToStringConverter());
+
+        //then
+        assertThat(conversionService.convert("10", Integer.class)).isEqualTo(10);
+        assertThat(conversionService.convert(10, String.class)).isEqualTo("10");
+        assertThat(conversionService.convert("127.0.0.1:8080", IpPort.class)).
+                isEqualTo(new IpPort("127.0.0.1", 8080));
+        assertThat(conversionService.convert(new IpPort("127.0.0.1", 8080), String.class))
+                .isEqualTo("127.0.0.1:8080");
+    }
+}
+```
+
+`DefaultConversionService` 는 `ConversionService` 인터페이스를 구현했는데, 추가로 컨버터를 등록하는 기능도 제공한다.
+
+#### 등록과 사용 분리
+
+컨버터를 등록할 때는 `StringToIntegerConverter` 같은 타입 컨버터를 명확하게 알아야 한다. 
+반면에 컨버터를 사용하는 입장에서는 타입 컨버터를 전혀 몰라도 된다. 타입 컨버터들은 모두 컨버전 서비스 내부에 숨어서 제공된다. 
+따라서 타입을 변환을 원하는 사용자는 컨버전 서비스 인터페이스에만 의존하면 된다. 
+물론 컨버전 서비스를 등록하는 부분과 사용하는 부분을 분리하고 의존관계 주입을 사용해야 한다.
+
+#### 컨버전 서비스 사용
+
+`Integer value = conversionService.convert("10", Integer.class)`
+
+#### 인터페이스 분리 원칙 - ISP(Interface Segregation Principal)
+
+인터페이스 분리 원칙은 클라이언트가 자신이 이용하지 않는 메서드에 의존하지 않아야 한다.
+
+`DefaultConversionService` 는 다음 두 인터페이스를 구현했다.
+
+* `ConversionService` : 컨버터 사용에 초점 
+* `ConverterRegistry` : 컨버터 등록에 초점
+
+
+이렇게 인터페이스를 분리하면 컨버터를 사용하는 클라이언트와 컨버터를 등록하고 관리하는 클라이언트의 관심사를 명확하게 분리할 수 있다. 
+특히 컨버터를 사용하는 클라이언트는 `ConversionService` 만 의존하면 되므로, 컨버터를 어떻게 등록하고 관리하는지는 전혀 몰라도 된다. 
+결과적으로 컨버터를 사용하는 클라이언트는 꼭 필요한 메서드만 알게된다. 이렇게 인터페이스를 분리하는 것을 ISP 라 한다.
+
+
+https://ko.wikipedia.org/wiki/ %EC%9D%B8%ED%84%B0%ED%8E%98%EC%9D%B4%EC%8A%A4_%EB%B6%84%EB% A6%AC_%EC%9B%90%EC%B9%99
+
+
+스프링은 내부에서 `ConversionService` 를 사용해서 타입을 변환한다. 예를 들어서 앞서 살펴본 `@RequestParam` 같은 곳에서 
+이 기능을 사용해서 타입을 변환한다.
+
+### 스프링에 Converter 적용하기
+
+#### WebConfig - 컨버터 등록
+
+```java
+package hello.typeconverter;
+
+import hello.typeconverter.converter.IntegerToStringConverter;
+import hello.typeconverter.converter.IpPortToStringConverter;
+import hello.typeconverter.converter.StringToIntegerConverter;
+import hello.typeconverter.converter.StringToIpPortConverter;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.format.FormatterRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+@Configuration
+public class WebConfig implements WebMvcConfigurer {
+
+    @Override
+    public void addFormatters(FormatterRegistry registry) {
+        registry.addConverter(new StringToIntegerConverter());
+        registry.addConverter(new IntegerToStringConverter());
+        registry.addConverter(new IpPortToStringConverter());
+        registry.addConverter(new StringToIpPortConverter());
+    }
+}
+```
+
+스프링은 내부에서 `ConversionService` 를 제공한다. 우리는 `WebMvcConfigurer` 가 제공하는 `addFormatters()` 를 사용해서 
+추가하고 싶은 컨버터를 등록하면 된다. 이렇게 하면 스프링은 내부에서 사용하는 `ConversionService` 에 컨버터를 추가해준다.
+
+#### HelloController
+
+```java
+@GetMapping("/hello-v2")
+public String helloV2(@RequestParam Integer data){
+    System.out.println("data = " + data);
+    return "ok";
+}
+```
+
+`?data=10` 의 쿼리 파라미터는 문자이고 이것을 `Integer data` 로 변환하는 과정이 필요하다. 실행해보면 직접 등록한 `StringToIntegerConverter` 가 작동하는 로그를 확인할 수 있다.
+그런데 생각해보면 `StringToIntegerConverter` 를 등록하기 전에도 이 코드는 잘 수행되었다. 
+그것은 스프링이 내부에서 수 많은 기본 컨버터들을 제공하기 때문이다. 컨버터를 추가하면 추가한 컨버터가 기본 컨버터 보다 높은 우선순위를 가진다.
+
+
+#### HelloController
+
+```java
+@GetMapping("/ip-port")
+public String ipPort(@RequestParam IpPort ipPort){
+    System.out.println("ipPort.getIp() = " + ipPort.getIp());
+    System.out.println("ipPort.getPort() = " + ipPort.getPort());
+    return "ok";
+}
+```
+
+`?ipPort=127.0.0.1:8080` 쿼리 스트링이 `@RequestParam IpPort ipPort` 에서 객체 타입으로 잘 변환 된 것을 확인할 수 있다.
+
+
+#### 처리 과정
+`@RequestParam` 은 `@RequestParam` 을 처리하는 `ArgumentResolver` 인 
+`RequestParamMethodArgumentResolver` 에서 `ConversionService` 를 사용해서 타입을 변환한다. 
+부모 클래스와 다양한 외부 클래스를 호출하는 등 복잡한 내부 과정을 거치기 때문에 대략 이렇게 처리되는 것으로 이해해도 충분하다.
+
