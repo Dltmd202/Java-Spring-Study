@@ -62,3 +62,121 @@
 
 
 
+### 서블릿과 파일 업로드1
+
+#### ServletUploadControllerV1
+
+```java
+package hello.upload.controller;
+
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.Part;
+import java.io.IOException;
+import java.util.Collection;
+
+@Slf4j
+@Controller
+@RequestMapping("/servlet/v1")
+public class ServletUploadControllerV1 {
+
+    @GetMapping("/upload")
+    public String newFile(){
+        return "upload-form";
+    }
+
+    @PostMapping("/upload")
+    public String saveFileV1(HttpServletRequest request) throws ServletException, IOException {
+        log.info("request={}", request);
+
+        String itemName = request.getParameter("itemName");
+        log.info("itemName={}", itemName);
+
+        Collection<Part> parts = request.getParts();
+        log.info("parts={}", parts);
+
+        return "upload-form";
+    }
+}
+```
+
+`request.getParts()` : `multipart/form-data` 전송 방식에서 각각 나누어진 부분을 받아서 확인할 수 있다.
+
+
+#### 멀티파트 사용 옵션
+
+#### 업로드 사이즈 제한
+
+```yaml
+spring.servlet.multipart.max-file-size=1MB
+spring.servlet.multipart.max-request-size=10MB
+```
+
+
+큰 파일을 무제한 업로드하게 둘 수는 없으므로 업로드 사이즈를 제한할 수 있다. 
+사이즈를 넘으면 예외( `SizeLimitExceededException` )가 발생한다. 
+
+`max-file-size` : 파일 하나의 최대 사이즈, 기본 1MB
+
+#### spring.servlet.multipart.enabled 끄기
+
+
+`spring.servlet.multipart.enabled=false`
+
+
+#### 결과 로그
+
+```
+request=org.apache.catalina.connector.RequestFacade@xxx
+itemName=null
+parts=[]
+```
+
+멀티파트는 일반적인 폼 요청인 `application/x-www-form-urlencoded` 보다 훨씬 복잡하다. 
+`spring.servlet.multipart.enabled` 옵션을 끄면 서블릿 컨테이너는 멀티파트와 관련된 처리를 하지 않는다.
+
+
+그래서 결과 로그를 보면 `request.getParameter("itemName")` , `request.getParts()` 의 결과가 비어있다.
+
+
+#### spring.servlet.multipart.enabled 켜기
+
+
+`spring.servlet.multipart.enabled=true` (기본 true)
+
+
+이 옵션을 켜면 스프링 부트는 서블릿 컨테이너에게 멀티파트 데이터를 처리하라고 설정한다. 참고로 기본 값은 `true` 이다.
+
+
+```
+request=org.springframework.web.multipart.support.StandardMultipartHttpServletR
+equest
+itemName=Spring
+parts=[ApplicationPart1, ApplicationPart2]
+```
+
+
+`request.getParameter("itemName")` 의 결과도 잘 출력되고, 
+`request.getParts()` 에도 요청한 두 가지 멀티파트의 부분 데이터가 포함된 것을 확인할 수 있다. 
+이 옵션을 켜면 복잡한 멀티파트 요청을 처리해서 사용할 수 있게 제공한다.
+
+
+
+로그를 보면 `HttpServletRequest` 객체가 `RequestFacade` -> `StandardMultipartHttpServletRequest` 로 변한 것을 확인할 수 있다.
+
+> 참고
+> 
+> `spring.servlet.multipart.enabled` 옵션을 켜면 스프링의 `DispatcherServlet` 에서 멀티파트 리졸버( `MultipartResolver` )를 실행한다.
+> 멀티파트 리졸버는 멀티파트 요청인 경우 서블릿 컨테이너가 전달하는 일반적인 `HttpServletRequest` 를 `MultipartHttpServletRequest` 로 변환해서 반환한다.
+> `MultipartHttpServletRequest` 는 `HttpServletRequest` 의 자식 인터페이스이고, 멀티파트와 관련된 추가 기능을 제공한다.
+> 스프링이 제공하는 기본 멀티파트 리졸버는 `MultipartHttpServletRequest` 인터페이스를 구현한 `StandardMultipartHttpServletRequest` 를 반환한다.
+> 이제 컨트롤러에서 `HttpServletRequest` 대신에 `MultipartHttpServletRequest` 를 주입받을 수 있는데, 
+> 이것을 사용하면 멀티파트와 관련된 여러가지 처리를 편리하게 할 수 있다.
+
