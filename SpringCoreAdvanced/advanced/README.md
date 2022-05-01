@@ -433,3 +433,149 @@ class HelloTraceV1Test {
 [898a3def] hello time=13ms ex=java.lang.IllegalStateException
 ```
 
+
+### 로그 추적기 V1 - 적용
+
+#### OrderControllerV1
+
+```java
+package hello.advanced.app.v1;
+
+import hello.advanced.trace.TraceStatus;
+import hello.advanced.trace.hellotrace.HelloTraceV1;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequiredArgsConstructor
+public class OrderControllerV1 {
+
+    private final OrderServiceV1 orderService;
+    private final HelloTraceV1 trace;
+
+
+    @GetMapping("/v1/request")
+    public String request(String itemId){
+
+
+        TraceStatus status = null;
+        try {
+            status = trace.begin("OrderController.request()");
+            orderService.orderItem(itemId);
+            trace.end(status);
+            return "ok";
+        } catch (Exception e){
+            trace.exception(status, e);
+            throw e;
+        }
+    }
+}
+```
+
+* `HelloTraceV1 trace` : `HelloTraceV1` 을 주입 받는다. 참고로 `HelloTraceV1` 은 `@Component` 
+  애노테이션을 가지고 있기 때문에 컴포넌트 스캔의 대상이 된다. 따라서 자동으로 스프링 빈으로 등록된다.
+
+* `trace.begin("OrderController.request()")` : 로그를 시작할 때 메시지 이름으로 컨트롤러 이름 + 메서드 이름을 주었다. 
+  이렇게 하면 어떤 컨트롤러와 메서드가 호출되었는지 로그로 편리하게 확인할 수 있다. 물론 수작업이다.
+
+* 단순하게 `trace.begin()` , `trace.end()` 코드 두 줄만 적용하면 될 줄 알았지만, 실상은 그렇지 않다. 
+  `trace.exception()` 으로 예외까지 처리해야 하므로 지저분한 `try` , `catch` 코드가 추가된다.
+
+* `begin()` 의 결과 값으로 받은 `TraceStatus status` 값을 `end()` , `exception()` 에 넘겨야 한다. 
+  결국 `try` , `catch` 블록 모두에 이 값을 넘겨야한다. 따라서 `try` 상위에 `TraceStatus status` 코드를 선언해야 한다. 
+  만약 `try` 안에서 `TraceStatus status` 를 선언하면 `try` 블록안에서만 해당 변수가 유효하기 때문에 `catch` 블록에 넘길 수 없다. 
+  따라서 컴파일 오류가 발생한다.
+
+* `throw e` : 예외를 꼭 다시 던져주어야 한다. 그렇지 않으면 여기서 예외를 먹어버리고, 이후에 정상 흐름으로 동작한다. 
+  로그는 애플리케이션에 흐름에 영향을 주면 안된다. 로그 때문에 예외가 사라지면 안된다.
+
+
+#### OrderServiceV1
+
+```java
+package hello.advanced.app.v1;
+
+import hello.advanced.trace.TraceStatus;
+import hello.advanced.trace.hellotrace.HelloTraceV1;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+@Service
+@RequiredArgsConstructor
+public class OrderServiceV1 {
+
+    private final OrderRepositoryV1 orderRepository;
+    private final HelloTraceV1 trace;
+
+    public void orderItem(String itemId){
+
+        TraceStatus status = null;
+        try {
+            status = trace.begin("OrderService.request()");
+            orderRepository.save(itemId);
+            trace.end(status);
+        } catch (Exception e){
+            trace.exception(status, e);
+            throw e;
+        }
+    }
+}
+```
+
+#### OrderRepositoryV1
+
+```java
+package hello.advanced.app.v1;
+
+import hello.advanced.trace.TraceStatus;
+import hello.advanced.trace.hellotrace.HelloTraceV1;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Repository;
+
+@Repository
+@RequiredArgsConstructor
+public class OrderRepositoryV1 {
+
+    private final HelloTraceV1 trace;
+
+    public void save(String itemId){
+
+        TraceStatus status = null;
+        try {
+            status = trace.begin("OrderRepository.request()");
+            if(itemId.equals("ex")){
+                throw new IllegalArgumentException("예외 발생");
+            }
+            sleep(1000);
+            trace.end(status);
+        } catch (Exception e){
+            trace.exception(status, e);
+            throw e;
+        }
+
+    }
+
+    private void sleep(int millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+#### 정상 실행 로그
+
+```
+[11111111] OrderController.request()
+[22222222] OrderService.orderItem()
+[33333333] OrderRepository.save()
+[33333333] OrderRepository.save() time=1000ms
+[22222222] OrderService.orderItem() time=1001ms
+[11111111] OrderController.request() time=1001ms
+```
+
+![](./res/1.png)
+
