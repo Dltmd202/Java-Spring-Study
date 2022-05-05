@@ -1089,3 +1089,500 @@ public class OrderRepositoryV3 {
 }
 ```
 
+### 필드 동기화 - 동시성 문제
+
+`FieldLogTrace` 는 심각한 동시성 문제를 가지고 있다.
+
+#### 동시성 문제 확인
+다음 로직을 1초 안에 2번 실행
+
+
+#### 기대하는 결과
+
+```text
+[nio-8080-exec-3] [52808e46] OrderController.request()
+[nio-8080-exec-3] [52808e46] |-->OrderService.orderItem()
+[nio-8080-exec-3] [52808e46] |   |-->OrderRepository.save()
+[nio-8080-exec-4] [4568423c] OrderController.request()
+[nio-8080-exec-4] [4568423c] |-->OrderService.orderItem()
+[nio-8080-exec-4] [4568423c] |   |-->OrderRepository.save()
+[nio-8080-exec-3] [52808e46] |   |<--OrderRepository.save() time=1001ms
+[nio-8080-exec-3] [52808e46] |<--OrderService.orderItem() time=1001ms
+[nio-8080-exec-3] [52808e46] OrderController.request() time=1003ms
+[nio-8080-exec-4] [4568423c] |   |<--OrderRepository.save() time=1000ms
+[nio-8080-exec-4] [4568423c] |<--OrderService.orderItem() time=1001ms
+[nio-8080-exec-4] [4568423c] OrderController.request() time=1001ms
+```
+
+
+#### 기대하는 결과 - 로그 분리해서 확인하기
+
+
+```text
+[52808e46]
+[nio-8080-exec-3] [52808e46] OrderController.request()
+[nio-8080-exec-3] [52808e46] |-->OrderService.orderItem()
+[nio-8080-exec-3] [52808e46] |   |-->OrderRepository.save()
+[nio-8080-exec-3] [52808e46] |   |<--OrderRepository.save() time=1001ms
+[nio-8080-exec-3] [52808e46] |<--OrderService.orderItem() time=1001ms
+[nio-8080-exec-3] [52808e46] OrderController.request() time=1003ms
+
+[4568423c]
+[nio-8080-exec-4] [4568423c] OrderController.request()
+[nio-8080-exec-4] [4568423c] |-->OrderService.orderItem()
+[nio-8080-exec-4] [4568423c] |   |-->OrderRepository.save()
+[nio-8080-exec-4] [4568423c] |   |<--OrderRepository.save() time=1000ms
+[nio-8080-exec-4] [4568423c] |<--OrderService.orderItem() time=1001ms
+[nio-8080-exec-4] [4568423c] OrderController.request() time=1001ms  
+```
+
+#### 실제 결과 - 로그 분리해서 확인하기
+
+```text
+ [nio-8080-exec-3]
+[nio-8080-exec-3] [aaaaaaaa] OrderController.request()
+[nio-8080-exec-3] [aaaaaaaa] |-->OrderService.orderItem()
+[nio-8080-exec-3] [aaaaaaaa] |   |-->OrderRepository.save()
+[nio-8080-exec-3] [aaaaaaaa] |   |<--OrderRepository.save() time=1005ms
+[nio-8080-exec-3] [aaaaaaaa] |<--OrderService.orderItem() time=1005ms
+[nio-8080-exec-3] [aaaaaaaa] OrderController.request() time=1005ms
+
+[nio-8080-exec-4]
+[nio-8080-exec-4] [aaaaaaaa] |   |   |-->OrderController.request()
+[nio-8080-exec-4] [aaaaaaaa] |   |   |   |-->OrderService.orderItem()
+[nio-8080-exec-4] [aaaaaaaa] |   |   |   |-->OrderRepository.save()
+[nio-8080-exec-4] [aaaaaaaa] |   |   |   |<--OrderRepository.save() time=1005ms
+[nio-8080-exec-4] [aaaaaaaa] |   |   |   |<--OrderService.orderItem() time=1005ms
+[nio-8080-exec-4] [aaaaaaaa] |   |   |<--OrderController.request() time=1005ms
+```
+
+
+#### 동시성 문제
+이 문제는 동시성 문제
+`FieldLogTrace` 는 싱글톤으로 등록된 스프링 빈이다. 이 객체의 인스턴스가 애플리케이션에 딱 1 존재한다는 뜻이다. 
+이렇게 하나만 있는 인스턴스의 `FieldLogTrace.traceIdHolder` 필드를 여러 쓰레드가 동시에 접근하기 때문에 문제가 발생한다.
+
+
+### 동시성 문제 - 예제 코드
+
+#### FieldService
+
+```java
+package hello.advanced.trace.threadlocal.code;
+
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+public class FieldService {
+
+    private String nameStore;
+
+    public String logic(String name){
+        log.info("저장 name={} -> nameStore={}", name, nameStore);
+        nameStore = name;
+        sleep(1000);
+        log.info("조회 nameStore={}", nameStore);
+        return nameStore;
+    }
+
+    private void sleep(int millis) {
+        try{
+            Thread.sleep(millis);
+        } catch (InterruptedException e){
+            e.printStackTrace();;
+        }
+    }
+}
+```
+
+매우 단순한 로직이다. 파라미터로 넘어온 `name` 을 필드인 `nameStore` 에 저장한다. 그리고 1초간 쉰 다음 필드에 저장된 `nameStore` 를 반환한다.
+
+
+#### FieldServiceTest
+
+```java
+package hello.advanced.trace.threadlocal;
+
+import hello.advanced.trace.threadlocal.code.FieldService;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Test;
+
+@Slf4j
+public class FieldServiceTest {
+
+    private FieldService fieldService = new FieldService();
+
+    @Test
+    public void Field() throws Exception {
+        //given
+        log.info("main start");
+        Runnable userA = () -> {
+            fieldService.logic("userA");
+        };
+
+        Runnable userB = () -> {
+            fieldService.logic("userB");
+        };
+
+        Thread threadA = new Thread(userA);
+        threadA.setName("thread-A");
+        Thread threadB = new Thread(userB);
+        threadB.setName("thread-B");
+
+        threadA.start();
+        sleep(2000); // 동시성 문제가 발생하지 않는
+        threadB.start();
+
+        sleep(3000);
+        log.info("main exit");
+    }
+
+    private void sleep(int millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+#### 순서대로 실행
+
+`sleep(2000)` 을 설정해서 `thread-A` 의 실행이 끝나고 나서 `thread-B` 가 실행
+`FieldService.logic()` 메서드는 내부에 `sleep(1000)` 으로 1초의 지연이 있다. 
+따라서 1초 이후에 호출하면 순서대로 실행할 수 있다. 
+
+
+#### 실행결과
+
+```text
+[Test worker]  main start
+[Thread-A]     저장 name=userA -> nameStore=null
+[Thread-A]     조회 nameStore=userA
+[Thread-B]     저장 name=userB -> nameStore=userA
+[Thread-B]     조회 nameStore=userB
+[Test worker]  main exit
+```
+
+
+![](./res/3.png)
+
+
+
+![](./res/img.png)
+
+
+#### 동시성 문제 발생 코드
+
+`FieldService.logic()` 메서드는 내부에 `sleep(1000)` 으로 1초의 지연이 있다. 
+따라서 1초 이후에 호출하면 순서대로 실행할 수 있다. 
+다음에 설정할 100(ms)는 0.1초이기 때문에 thread-A 의 작업이 끝나기 전에 thread-B 가 실행된다.
+
+![](./res/img_1.png)
+
+
+* 먼저 `thread-A` 가 `userA` 값을 `nameStore` 에 보관한다.
+
+
+![](./res/img_2.png)
+
+
+* 0.1초 이후에 `thread-B` 가 `userB` 의 값을 `nameStore` 에 보관한다. 
+  기존에 `nameStore` 에 보관되어 있던 `userA` 값은 제거되고 `userB` 값이 저장된다.
+
+  
+![](/res/img_3.png)
+
+* `thread-A` 의 호출이 끝나면서 `nameStore` 의 결과를 반환받는데, 이때 `nameStore` 는 앞의 2번에서 userB 의 값으로 대체되었다. 
+  따라서 기대했던 `userA` 의 값이 아니라 `userB` 의 값이 반환된다.
+* `thread-B` 의 호출이 끝나면서 `nameStore` 의 결과인 `userB` 를 반환받는다.
+
+#### 정리하면 다음과 같다.
+
+
+1. `Thread-A` 는 `userA` 를 `nameStore` 에 저장했다. 
+2. `Thread-B` 는 `userB` 를 `nameStore` 에 저장했다. 
+3. `Thread-A` 는 `userB` 를 `nameStore` 에서 조회했다. 
+4. `Thread-B` 는 `userB` 를 `nameStore` 에서 조회했다.
+
+
+#### 동시성 문제
+결과적으로 `Thread-A` 입장에서는 저장한 데이터와 조회한 데이터가 다른 문제가 발생한다. 
+이처럼 여러 쓰레드가 동시에 같은 인스턴스의 필드 값을 변경하면서 발생하는 문제를 동시성 문제라 한다. 
+이런 동시성 문제는 여러 쓰레드가 같은 인스턴스의 필드에 접근해야 하기 때문에 
+트래픽이 적은 상황에서는 확률상 잘 나타나지 않고, 트래픽이 점점 많아질 수 록 자주 발생한다.
+특히 스프링 빈 처럼 싱글톤 객체의 필드를 변경하며 사용할 때 이러한 동시성 문제를 조심해야 한다.
+
+
+> 참고
+> 
+> 이런 동시성 문제는 지역 변수에서는 발생하지 않는다. 
+> 지역 변수는 쓰레드마다 각각 다른 메모리 영역이 할당된다.
+> 동시성 문제가 발생하는 곳은 같은 인스턴스의 필드(주로 싱글톤에서 자주 발생), 
+> 또는 static 같은 공용 필드에 접근할 때 발생한다.
+> 동시성 문제는 값을 읽기만 하면 발생하지 않는다. 어디선가 값을 변경하기 때문에 발생한다.
+
+### ThreadLocal - 소개
+
+
+
+#### 일반적인 변수 필드
+
+
+여러 쓰레드가 같은 인스턴스의 필드에 접근하면 처음 쓰레드가 보관한 데이터가 사라질 수 있다.
+
+
+![](./res/img_4.png)
+
+
+`thread-A` 가 `userA` 라는 값을 저장하고
+
+
+![](./res/img_5.png)
+
+
+`thread-B` 가 `userB` 라는 값을 저장하면 직전에 `thread-A` 가 저장한 `userA` 값은 사라진다.
+
+
+#### 쓰레드 로컬
+
+쓰레드 로컬을 사용하면 각 쓰레드마다 별도의 내부 저장소를 제공한다. 
+따라서 같은 인스턴스의 쓰레드 로컬 필드에 접근해도 문제 없다.
+
+
+![](./res/img_6.png)
+
+
+`thread-A` 가 `userA` 라는 값을 저장하면 쓰레드 로컬은 `thread-A` 전용 보관소에 데이터를 안전하게 보관한다.
+
+
+![](./res/img_7.png)
+
+
+쓰레드 로컬을 통해서 데이터를 조회할 때도 `thread-A` 가 조회하면 쓰레드 로컬은 `thread-A` 전용 보관소에서 `userA` 데이터를 반환해준다. 
+물론 `thread-B` 가 조회하면 `thread-B` 전용 보관소에서 `userB` 데이터를 반환해준다.
+
+
+자바는 언어차원에서 쓰레드 로컬을 지원하기 위한 `java.lang.ThreadLocal` 클래스를 제공한다.
+
+### ThreadLocal - 예제 코드
+
+#### ThreadLocalService
+
+```java
+package hello.advanced.trace.threadlocal.code;
+
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+public class FieldService {
+
+    private ThreadLocal<String> nameStore = new ThreadLocal<>();
+
+    public String logic(String name){
+        log.info("저장 name={} -> nameStore={}", name, nameStore);
+        nameStore.set(name);
+        sleep(1000);
+        log.info("조회 nameStore={}", nameStore.get());
+        return nameStore.get();
+    }
+
+    private void sleep(int millis) {
+        try{
+            Thread.sleep(millis);
+        } catch (InterruptedException e){
+            e.printStackTrace();;
+        }
+    }
+}
+```
+
+기존에 있던 `FieldService` 와 거의 같은 코드인데, `nameStore` 필드가 일반 `String` 타입에서 `ThreadLocal` 을 사용하도록 변경되었다.
+
+#### ThreadLocal 사용법
+* 값 저장: `ThreadLocal.set(xxx)` 
+* 값 조회: `ThreadLocal.get()`
+* 값 제거: `ThreadLocal.remove()`
+
+> 주의
+> 
+> 해당 쓰레드가 쓰레드 로컬을 모두 사용하고 나면 `ThreadLocal.remove()` 를 호출해서 쓰레드 로컬에
+> 저장된 값을 제거해주어야 한다. 
+
+
+#### 쓰레드 로컬 동기화 - 개발
+
+`FieldLogTrace` 에서 발생했던 동시성 문제를 `ThreadLocal` 로 해결해보자.
+`TraceId traceIdHolder` 필드를 쓰레드 로컬을 사용하도록 `ThreadLocal<TraceId> traceIdHolder` 로 변경하면 된다.
+
+#### ThreadLocalLogTrace
+
+```java
+package hello.advanced.trace.logtrace;
+
+import hello.advanced.trace.TraceId;
+import hello.advanced.trace.TraceStatus;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+public class ThreadLocalLogTrace implements LogTrace{
+
+  private static final String START_PREFIX = "-->";
+  private static final String COMPLETE_PREFIX = "<--";
+  private static final String EX_PREFIX = "<X-";
+
+  private ThreadLocal<TraceId> traceIdHolder = new ThreadLocal<>();
+
+  @Override
+  public TraceStatus begin(String message) {
+    syncTraceId();
+    TraceId traceId = traceIdHolder.get();
+    long startTimeMs = System.currentTimeMillis();
+    //로그 출력
+    log.info("[{}] {}{}",traceId.getId(), addSpace(START_PREFIX, traceId.getLevel()), message);
+    return new TraceStatus(traceId, startTimeMs, message);
+  }
+
+  private void syncTraceId(){
+    TraceId traceId = traceIdHolder.get();
+    if(traceId == null){
+      traceIdHolder.set(new TraceId());
+    } else {
+      traceIdHolder.set(traceId.createNextId());
+    }
+  }
+
+  @Override
+  public void end(TraceStatus status) {
+    complete(status, null);
+  }
+
+  @Override
+  public void exception(TraceStatus status, Exception e) {
+    complete(status, e);
+  }
+
+  private static String addSpace(String prefix, int level){
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < level; i++) {
+      sb.append((i == level - 1) ? "|" + prefix : "|   ");
+    }
+    return sb.toString();
+  }
+
+  private void complete(TraceStatus status, Exception e){
+    Long stopTimeMs = System.currentTimeMillis();
+    long resultTimeMs = stopTimeMs - status.getStartTimeMs();
+    TraceId traceId = status.getTraceId();
+    if(e == null){
+      log.info("[{}] {}{} time={}ms",
+              traceId.getId(),
+              addSpace(COMPLETE_PREFIX, traceId.getLevel()),
+              status.getMessage(), resultTimeMs);
+    } else {
+      log.info("[{}] {}{} time={}ms ex={}",
+              traceId.getId(),
+              addSpace(EX_PREFIX, traceId.getLevel()),
+              status.getMessage(),
+              resultTimeMs,
+              e.toString());
+    }
+    releaseTraceId();
+  }
+
+  private void releaseTraceId() {
+    TraceId traceId = traceIdHolder.get();
+    if(traceId.isFirstLevel()){
+      traceIdHolder.remove(); //destroy
+    } else {
+      traceIdHolder.set(traceId.createPreviousId());
+    }
+  }
+}
+```
+
+`traceIdHolder` 가 필드에서 `ThreadLocal` 로 변경되었다. 따라서 값을 저장할 때는 `set(..)` 을 사용하고, 값을 조회할 때는 `get()` 을 사용한다.
+
+#### ThreadLocal.remove()
+
+추가로 쓰레드 로컬을 모두 사용하고 나면 꼭 `ThreadLocal.remove()` 를 호출해서 쓰레드 로컬에 저장된 값을 제거해주어야 한다.
+
+```text
+[3f902f0b] hello1
+[3f902f0b] |-->hello2
+[3f902f0b] |<--hello2 time=2ms
+[3f902f0b] hello1 time=6ms //end() -> releaseTraceId() -> level==0, ThreadLocal.remove() 호출
+```
+
+여기서는 `releaseTraceId()` 를 통해 `level` 이 점점 낮아져서 2 -> 1 -> 0이 되면 로그를 처음 호출한 부분으로 돌아온것이다.
+따라서 이 경우 연관된 로그출력이 끝난것이다. 이제 더이상 TraceId 값을 추적하지 않아도 된다. 
+그래서 `traceId.isFirstLevel()` ( `level==0` )인 경우 `ThreadLocal.remove()` 를 호출해서 쓰레드 로컬에 저장된 값을 제거해준다.
+
+
+### 쓰레드 로컬 동기화 - 적용
+
+
+#### LogTraceConfig - 수정
+
+```java
+package hello.advanced;
+
+import hello.advanced.trace.logtrace.LogTrace;
+import hello.advanced.trace.logtrace.ThreadLocalLogTrace;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class LogTraceConfig {
+
+    @Bean
+    public LogTrace logTrace(){
+        return new ThreadLocalLogTrace();
+    }
+}
+```
+
+### 쓰레드 로컬 - 주의사항
+
+#### 사용자A 저장 요청
+
+
+![](./res/img_8.png)
+
+
+* 1. 사용자A가 저장 HTTP를 요청했다.
+* 2. WAS는 쓰레드 풀에서 쓰레드를 하나 조회한다.
+* 3. 쓰레드 `thread-A` 가 할당되었다.
+* 4. `thread-A` 는 사용자A 의 데이터를 쓰레드 로컬에 저장한다.
+* 5. 쓰레드 로컬의 `thread-A` 전용 보관소에 사용자A 데이터를 보관한다.
+
+
+#### 사용자A 저장 요청 종료
+                    
+
+![](./res/img_9.png)
+
+* 1. 사용자A의 HTTP 응답이 끝난다.
+* 2. WAS는 사용이 끝난 thread-A 를 쓰레드 풀에 반환한다. 쓰레드를 생성하는 비용은 비싸기 때문에 쓰레드를 제거하지 않고, 보통 쓰레드 풀을 통해서 쓰레드를 재사용한다.
+* 3. thread-A 는 쓰레드풀에 아직 살아있다. 따라서 쓰레드 로컬의 thread-A 전용 보관소에 사용자A 데이터도 함께 살아있게 된다.
+
+
+#### 사용자B 조회 요청
+
+
+![](./res/img_10.png)
+
+
+* 1. 사용자B가 조회를 위한 새로운 HTTP 요청을 한다.
+* 2. WAS는 쓰레드 풀에서 쓰레드를 하나 조회한다.
+* 3. 쓰레드 `thread-A` 가 할당되었다. (물론 다른 쓰레드가 할당될 수 도 있다.)
+* 4. 이번에는 조회하는 요청이다. `thread-A` 는 쓰레드 로컬에서 데이터를 조회한다. 
+* 5. 쓰레드 로컬은 `thread-A` 전용 보관소에 있는 `사용자A` 값을 반환한다.
+* 6. 결과적으로 `사용자A` 값이 반환된다.
+* 7. 사용자B는 `사용자A`의 정보를 조회하게 된다.
+
+
+결과적으로 사용자B는 사용자A의 데이터를 확인하게 되는 심각한 문제가 발생하게 된다.
+이런 문제를 예방하려면 사용자A의 요청이 끝날 때 쓰레드 로컬의 값을 
+`ThreadLocal.remove()` 를 통해서 꼭 제거해야 한다.
