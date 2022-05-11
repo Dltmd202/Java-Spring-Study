@@ -549,3 +549,194 @@ UML에서 상속을 받으면 삼각형 화살표가 `자식 -> 부모` 를 향�
 지금까지 설명한 이런 부분들을 더 깔끔하게 개선하려면 어떻게 해야할까?
 템플릿 메서드 패턴과 비슷한 역할을 하면서 상속의 단점을 제거할 수 있는 디자인 패턴이 바로 전략 패턴 
 (Strategy Pattern)이다.
+
+
+## 전략 패턴 - 시작
+
+### ContextV1Test
+
+```java
+package hello.advanced.trace.strategy;
+
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Test;
+
+@Slf4j
+public class ContextV1Test {
+
+    @Test
+    public void strategyV0() throws Exception {
+        logic1();
+        logic2();
+    }
+
+    private void logic1() {
+        long startTme = System.currentTimeMillis();
+        log.info("비즈니스 로직1 실행");
+
+        long endTime = System.currentTimeMillis();
+        long resultTime = endTime - startTme;
+        log.info("resultTime={}", resultTime);
+    }
+
+    private void logic2() {
+        long startTme = System.currentTimeMillis();
+        log.info("비즈니스 로직2 실행");
+
+        long endTime = System.currentTimeMillis();
+        long resultTime = endTime - startTme;
+        log.info("resultTime={}", resultTime);
+    }
+
+}
+```
+
+
+## 전략 패턴 - 예제1
+
+탬플릿 메서드 패턴은 부모 클래스에 변하지 않는 템플릿을 두고, 변하는 부분을 자식 클래스에 두어서 상속을 사용해서 문제를 해결했다.
+전략 패턴은 변하지 않는 부분을 `Context` 라는 곳에 두고, 변하는 부분을 `Strategy` 라는 인터페이스를 만들고 
+해당 인터페이스를 구현하도록 해서 문제를 해결한다. 상속이 아니라 위임으로 문제를 해결하는 것이다.
+
+전략 패턴에서 `Context` 는 변하지 않는 템플릿 역할을 하고, `Strategy` 는 변하는 알고리즘 역할을 한다.
+
+
+> GOF 디자인 패턴에서 정의한 전략 패턴의 의도는 다음과 같다.
+> 
+> 알고리즘 제품군을 정의하고 각각을 캡슐화하여 상호 교환 가능하게 만들자. 전략을 사용하면 알고리즘을
+> 사용하는 클라이언트와 독립적으로 알고리즘을 변경할 수 있다
+
+
+![](./res/img_4.png)
+
+
+### Strategy 인터페이스
+
+
+```java
+package hello.advanced.trace.strategy.code.strategy;
+
+public interface Strategy {
+    void call();
+}
+```
+
+
+### StrategyLogic1
+
+```java
+package hello.advanced.trace.strategy.code.strategy;
+
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+public class StrategyLogic1 implements Strategy{
+    @Override
+    public void call() {
+        log.info("비즈니스1 로직 실행");
+    }
+}
+```
+
+
+### StrategyLogic2
+
+```java
+package hello.advanced.trace.strategy.code.strategy;
+
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+public class StrategyLogic2 implements Strategy{
+    @Override
+    public void call() {
+        log.info("비즈니스2 로직 실행");
+    }
+}
+```
+
+
+### ContextV1
+
+```java
+package hello.advanced.trace.strategy.code.strategy;
+
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * 필드에 전략을 보관하는 방식
+ */
+@Slf4j
+public class ContextV1 {
+
+    private Strategy strategy;
+
+    public ContextV1(Strategy strategy){
+        this.strategy = strategy;
+    }
+
+    public void execute(){
+        long startTime = System.currentTimeMillis();
+
+        //비즈니스 로직 실행
+        strategy.call(); //위임
+
+        // 비즈니스 로직 종료
+        long endTime = System.currentTimeMillis();
+        long resultTime = endTime - startTime;
+        log.info("resultTime={}", resultTime);
+    }
+}
+```
+
+
+`ContextV1` 은 변하지 않는 로직을 가지고 있는 템플릿 역할을 하는 코드이다. 
+전략 패턴에서는 이것을 컨텍스트(문맥)이라 한다.
+쉽게 이야기해서 컨텍스트(문맥)는 크게 변하지 않지만, 그 문맥 속에서 `strategy` 를 통해 일부 전략이 변경된다 
+생각하면 된다.
+
+
+`Context` 는 내부에 `Strategy strategy` 필드를 가지고 있다. 
+이 필드에 변하는 부분인 `Strategy` 의 구현체를 주입하면 된다.
+전략 패턴의 핵심은 `Context` 는 `Strategy` 인터페이스에만 의존한다는 점이다. 
+덕분에 `Strategy` 의 구현체를 변경하거나 새로 만들어도 `Context` 코드에는 영향을 주지 않는다.
+
+
+
+### ContextV1Test - 추가
+
+```java
+/**
+ * 전략 패턴 사용
+ * @throws Exception
+ */
+@Test
+public void strategyV1() throws Exception {
+    StrategyLogic1 strategyLogic1 = new StrategyLogic1();
+    ContextV1 contextV1 = new ContextV1(strategyLogic1);
+    contextV1.execute();
+
+    StrategyLogic2 strategyLogic2 = new StrategyLogic2();
+    ContextV1 contextV2 = new ContextV1(strategyLogic2);
+    contextV2.execute();
+
+}
+```
+
+코드를 보면 의존관계 주입을 통해 `ContextV1` 에 `Strategy` 의 구현체인 `strategyLogic1` 를 
+주입하는 것을 확인할 수 있다. 이렇게해서 `Context` 안에 원하는 전략을 주입한다. 
+이렇게 원하는 모양으로 조립을 완료하고 난 다음에 `context1.execute()` 를 호출해서 `context` 를 실행한다.
+
+
+#### 전략 패턴 실행
+
+
+![](./res/img_5.png)
+
+
+1. `Context` 에 원하는 `Strategy` 구현체를 주입한다.
+2. 클라이언트는 `context` 를 실행한다.
+3. `context` 는 `context` 로직을 시작한다.
+4. `context` 로직 중간에 `strategy.call()` 을 호출해서 주입 받은 `strategy` 로직을 실행한다.
+5. `context` 는 나머지 로직을 실행한다.
+
