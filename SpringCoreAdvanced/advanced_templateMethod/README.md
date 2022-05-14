@@ -1075,3 +1075,184 @@ public class TemplateCallbackTest {
     }
 }
 ```
+
+## 템플릿 콜백 패턴 - 적용
+
+
+### TraceCallback 인터페이스
+
+```java
+package hello.advanced.trace.callback;
+
+public interface TraceCallback<T> {
+    T call();
+}
+```
+
+
+* 콜백을 전달하는 인터페이스이다.
+* `<T>` 제네릭을 사용했다. 콜백의 반환 타입을 정의한다.
+
+
+### TraceTemplate
+
+```java
+package hello.advanced.trace.callback;
+
+import hello.advanced.trace.TraceStatus;
+import hello.advanced.trace.logtrace.LogTrace;
+
+public class TraceTemplate {
+    private final LogTrace trace;
+
+    public TraceTemplate(LogTrace trace){
+        this.trace = trace;
+    }
+
+    public <T> T execute(String message, TraceCallback<T> callback){
+        TraceStatus status = null;
+
+        try{
+            status = trace.begin(message);
+
+            T result = callback.call();
+
+            trace.end(status);
+            return result;
+        } catch (Exception e){
+            trace.exception(status, e);
+            throw e;
+        }
+    }
+}
+```
+
+* `TraceTemplate` 는 템플릿 역할을 한다. 
+* `execute(..)` 를 보면 `message` 데이터와 콜백인 `TraceCallback callback` 을 전달 받는다. 
+* `<T>` 제네릭을 사용했다. 반환 타입을 정의한다.
+
+### OrderControllerV5
+
+```java
+package hello.advanced.app.v5;
+
+import hello.advanced.trace.callback.TraceCallback;
+import hello.advanced.trace.callback.TraceTemplate;
+import hello.advanced.trace.logtrace.LogTrace;
+import hello.advanced.trace.template.AbstractTemplate;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class OrderControllerV5 {
+
+    private final OrderServiceV5 orderService;
+    private final TraceTemplate template;
+
+    public OrderControllerV5(OrderServiceV5 orderService, LogTrace trace){
+        this.orderService = orderService;
+        this.template = new TraceTemplate(trace);
+    }
+
+
+    @GetMapping("/v5/request")
+    public String request(String itemId){
+        return template.execute("OrderController.request()", new TraceCallback<>() {
+            @Override
+            public String call() {
+                orderService.orderItem(itemId);
+                return "ok";
+            }
+        });
+    }
+}
+```
+
+* `this.template = new TraceTemplate(trace)` : `trace` 의존관계 주입을 받으면서 필요한 `TraceTemplate` 템플릿을 생성한다. 
+  참고로 `TraceTemplate` 를 처음부터 스프링 빈으로 등록하고 주입받아도 된다.
+* `template.execute(.., new TraceCallback(){..})` : 템플릿을 실행하면서 콜백을 전달한다. 여기서는 콜백으로 익명 내부 클래스를 사용했다.
+
+
+### OrderServiceV5
+
+```java
+package hello.advanced.app.v5;
+
+import hello.advanced.trace.callback.TraceTemplate;
+import hello.advanced.trace.logtrace.LogTrace;
+import hello.advanced.trace.template.AbstractTemplate;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+@Service
+public class OrderServiceV5 {
+
+  private final OrderRepositoryV5 orderRepository;
+  private final TraceTemplate template;
+
+  public OrderServiceV5(OrderRepositoryV5 orderRepository, LogTrace trace) {
+    this.orderRepository = orderRepository;
+    this.template = new TraceTemplate(trace);
+  }
+
+  public void orderItem(String itemId){
+    template.execute("OrderService.request()", () -> {
+      orderRepository.save(itemId);
+      return null;
+    });
+  }
+}
+```
+
+* `template.execute(.., new TraceCallback(){..})` : 템플릿을 실행하면서 콜백을 전달한다. 여기서는 콜백으로 람다를 전달했다.
+
+
+### OrderRepositoryV5
+
+```java
+package hello.advanced.app.v5;
+
+import hello.advanced.trace.callback.TraceTemplate;
+import hello.advanced.trace.logtrace.LogTrace;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public class OrderRepositoryV5 {
+
+    private final TraceTemplate template;
+
+    public OrderRepositoryV5(LogTrace trace) {
+        this.template = new TraceTemplate(trace);
+    }
+
+    public void save(String itemId){
+        template.execute("OrderRepository.request()", () -> {
+            if(itemId.equals("ex")){
+                throw new IllegalArgumentException("예외 발생");
+            }
+            sleep(1000);
+            return null;
+        });
+    }
+
+    private void sleep(int millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+### 정리
+
+템플릿 메서드 패턴, 전략 패턴, 그리고 템플릿 콜백 패턴까지 진행하면서 변하는 코드와 변하지 않는 코드를 분리했다. 
+그리고 최종적으로 템플릿 콜백 패턴을 적용하고 콜백으로 람다를 사용해서 코드 사용도 최소화 할 수 있었다.
+
+### 한계
+
+그런데 지금까지 설명한 방식의 한계는 아무리 최적화를 해도 결국 로그 추적기를 적용하기 위해서 원본
+코드를 수정해야 한다는 점이다. 클래스가 수백개이면 수백개를 더 힘들게 수정하는가 조금 덜 힘들게 수정하는가의 차이가 있을 뿐, 
+본질적으로 코드를 다 수정해야 하는 것은 마찬가지이다.
+
