@@ -1,14 +1,12 @@
-# 📚Java Study 
-
-## Java
-
-
+# 📚Java Study
 
 ## Spring
-- [HTTP 웹 기본 지식](./Http)
+
+- [HTTP BASIC](./Http)
 - [JPA](./JPA)
-- [스프링 MVC](./MVC_1)
-- [스프링 MVC](./MVC_2)
-- [스프링 코어](./SpringCore)
-- [스프링 코어 고급](./SpringCoreAdvanced)
-- [스프링부트-JPA 어플리케이션](./springBootJPA)
+- [Spring MVC](./MVC_1)
+- [Spring MVC](./MVC_2)
+- [Spring Core](./SpringCore)
+- [Spring Core - AOP](./SpringCoreAdvanced)
+- [SpringBoot-JPA](./springBootJPA)
+- [Spring DB](./SpringDB)
