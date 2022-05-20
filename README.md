@@ -1,8 +1,12 @@
-# 📚Java Study
+# TIL
+
+## Network
+
+- [HTTP](./Http)
+
 
 ## Spring
 
-- [HTTP BASIC](./Http)
 - [JPA](./JPA)
 - [Spring MVC](./MVC_1)
 - [Spring MVC](./MVC_2)
