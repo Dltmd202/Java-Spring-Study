@@ -172,3 +172,38 @@ A의 잔고만 5000원 감소하는 심각한 문제가 발생한다.
 * 세션1이 데이터베이스에 반영한 모든 데이터가 처음 상태로 복구된다.
 * 수정하거나 삭제한 데이터도 `rollback` 을 호출하면 모두 트랜잭션을 시작하기 직전의 상태로 복구된다.
 
+
+## 트랜잭션 - DB 예제2 - 자동 커밋, 수동 커밋
+
+### 자동 커밋
+
+트랜잭션을 사용하려면 먼저 자동 커밋과 수동 커밋을 이해해야 한다.
+자동 커밋으로 설정하면 각각의 쿼리 실행 직후에 자동으로 커밋을 호출한다. 
+따라서 커밋이나 롤백을 직접 호출하지 않아도 되는 편리함이 있다. 하지만 쿼리를 하나하나 실행할 때 마다 자동으로 커밋이 되어버리기 때문에 
+우리가 원하는 트랜잭션 기능을 제대로 사용할 수 없다.
+
+
+#### 자동 커밋 설정
+
+```mysql
+set autocommit true;
+insert into member(member_id, money) values ('data1',10000);
+insert into member(member_id, money) values ('data2',10000); 
+```
+
+따라서 `commit` , `rollback` 을 직접 호출하면서 트랜잭션 기능을 제대로 수행하려면 자동 커밋을 끄고 수동 커밋을 사용해야 한다.
+
+#### 수동 커밋 설정
+
+```mysql
+set autocommit false;
+insert into member(member_id, money) values ('data3',10000);
+insert into member(member_id, money) values ('data4',10000); commit;
+commit;
+```
+
+보통 자동 커밋 모드가 기본으로 설정된 경우가 많기 때문에, **수동 커밋 모드로 설정하는 것을 트랜잭션을 시작한다고 표현할 수 있다.**
+수동 커밋 설정을 하면 이후에 꼭 `commit` , `rollback` 을 호출해야 한다.
+
+
+
