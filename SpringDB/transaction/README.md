@@ -207,3 +207,141 @@ commit;
 
 
 
+## 트랜잭션 - DB 예제3 - 트랜잭션 실습
+
+### 1. 기본 데이터 입력
+
+### 기본 데이터
+
+![](./res/img_6.png)
+
+
+### 데이터 초기화 SQL
+
+```sql
+set autocommit true;
+delete from member;
+insert into member(member_id, money) values ("oldId", 10000);
+```
+
+* 자동 커밋 모드를 사용했기 때문에 별도로 커밋을 호출하지 않아도 된다.
+
+
+#### 이렇게 데이터를 초기화하고, 세션1, 세션2에서 다음 쿼리를 실행해서 결과를 확인
+
+```sql
+select * from member;
+```
+
+결과를 이미지와 비교하자. 참고로 이미지의 `name` 필드는 이해를 돕기 위해 그린 것이고 실제로는 없다.
+
+
+2. 신규 데이터 추가 - 커밋 전
+
+
+### 세션1 신규 데이터 추가
+
+![](./res/img_7.png)
+
+
+### 세션1 신규 데이터 추가 SQL
+
+```sql
+set autocommit false; //수동 커밋 모드
+insert into member(member_id, money) values ('newId1',10000); 
+insert into member(member_id, money) values ('newId2',10000);
+```
+
+#### 세션1, 세션2에서 다음 쿼리를 실행해서 결과를 확인
+
+```sql
+select * from member;
+```
+
+아직 세션1이 커밋을 하지 않은 상태이기 때문에 세션1에서는 입력한 데이터가 보이지만, 
+세션2에서는 입력한 데이터가 보이지 않는 것을 확인할 수 있다.
+
+
+### 3. 커밋 - commit
+
+세션1에서 신규 데이터를 입력했는데, 아직 커밋은 하지 않았다. 이제 커밋해서 데이터베이스에 결과를 반영해보자.
+
+
+### 세션1 신규 데이터 추가 후 commit
+
+![](./res/img_8.png)
+
+#### 세션1에서 커밋을 호출
+
+```sql
+commit;
+```
+
+
+#### 세션1, 세션2에서 다음 쿼리를 실행해서 결과를 확인
+
+```sql
+select * from member;
+```
+
+결과를 이미지와 비교해보자. 세션1이 트랜잭션을 커밋했기 때문에 데이터베이스에 실제 데이터가 반영된다.
+커밋 이후에는 모든 세션에서 데이터를 조회할 수 있다.
+
+
+### 롤백 - rollback
+
+### 기본 데이터
+
+![](./res/img_9.png)
+
+
+#### 예제를 처음으로 돌리기 위해 데이터를 초기화
+
+```sql
+ //데이터 초기화
+set autocommit true;
+delete from member;
+insert into member(member_id, money) values ('oldId',10000);
+```
+
+### 세션1 신규 데이터 추가 후
+
+![](./res/img_10.png)
+
+세션1에서 트랜잭션을 시작 상태로 만든 다음에 데이터를 추가
+
+```sql
+//트랜잭션 시작
+set autocommit false; //수동 커밋 모드
+insert into member(member_id, money) values ('newId1',10000); 
+insert into member(member_id, money) values ('newId2',10000);
+```
+
+### 세션1, 세션2에서 다음 쿼리를 실행해서 결과를 확인
+
+```sql
+select * from member;
+```
+
+아직 세션1이 커밋을 하지 않은 상태이기 때문에 세션1에서는 입력한 데이터가 보이지만, 
+세션2에서는 입력한 데이터가 보이지 않는 것을 확인할 수 있다.
+
+
+### 세션1 신규 데이터 추가 후 rollback
+
+
+![](./res/img_11.png)
+
+#### 세션1에서 롤백을 호출
+
+```sql
+rollback;
+```
+
+#### 세션1, 세션2에서 다음 쿼리를 실행해서 결과를 확인
+
+```sql
+select * from member;
+```
+
+결과를 이미지와 비교해보자. 롤백으로 데이터가 DB에 반영되지 않은 것을 확인할 수 있다.
