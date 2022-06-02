@@ -244,6 +244,9 @@ select * from member;
 ![](./res/img_7.png)
 
 
+![](./res/img_12.png)
+
+
 ### 세션1 신규 데이터 추가 SQL
 
 ```sql
@@ -270,6 +273,10 @@ select * from member;
 ### 세션1 신규 데이터 추가 후 commit
 
 ![](./res/img_8.png)
+
+
+![](./res/img_14.png)
+
 
 #### 세션1에서 커밋을 호출
 
@@ -308,6 +315,10 @@ insert into member(member_id, money) values ('oldId',10000);
 
 ![](./res/img_10.png)
 
+
+![](./res/img_13.png)
+
+
 세션1에서 트랜잭션을 시작 상태로 만든 다음에 데이터를 추가
 
 ```sql
@@ -331,6 +342,10 @@ select * from member;
 
 
 ![](./res/img_11.png)
+
+
+![](./res/img_15.png)
+
 
 #### 세션1에서 롤백을 호출
 
