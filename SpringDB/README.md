@@ -1,4 +1,4 @@
 # Spring DB
 
 * [JDBC](./jdbc)
-* [트랜잭션](./transaction)
+* [트랜ff잭션](./transaction)
