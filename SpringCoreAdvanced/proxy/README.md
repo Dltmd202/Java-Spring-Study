@@ -343,3 +343,105 @@ public class ProxyApplication {
 
 }
 ```
+
+
+## 예제 프로젝트 V3
+
+#### v3 - 컴포넌트 스캔으로 스프링 빈 자동 등록
+
+#### OrderRepositoryV3
+
+```java
+package hello.proxy.app.v3;
+
+import org.springframework.stereotype.Repository;
+
+@Repository
+public class OrderRepositoryV3 {
+
+    public void save(String itemId) {
+        if(itemId.equals("ex")){
+            throw new IllegalArgumentException("예외 발생");
+        }
+        sleep(1000);
+    }
+
+    private void sleep(int millis) {
+        try{
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+
+#### OrderServiceV3
+
+```java
+package hello.proxy.app.v3;
+
+import org.springframework.stereotype.Service;
+
+@Service
+public class OrderServiceV3 {
+    private final OrderRepositoryV3 orderRepository;
+
+    public OrderServiceV3(OrderRepositoryV3 orderRepositoryV3) {
+        this.orderRepository = orderRepositoryV3;
+    }
+
+    public void orderItem(String itemId) {
+        orderRepository.save(itemId);
+    }
+}
+```
+
+
+#### OrderControllerV3
+
+```java
+package hello.proxy.app.v3;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@Slf4j
+@RestController
+public class OrderControllerV3 {
+
+    private final OrderServiceV3 orderService;
+
+    public OrderControllerV3(OrderServiceV3 orderService) {
+        this.orderService = orderService;
+    }
+
+    @GetMapping("/v3/request")
+    public String request(String itemId) {
+        orderService.orderItem(itemId);
+        return "ok";
+    }
+
+    @GetMapping("/v3/no-log")
+    public String noLog() {
+        return "ok";
+    }
+}
+```
+
+`ProxyApplication` 에서 `@SpringBootApplication(scanBasePackages = "hello.proxy.app")` 를 사용했고, 
+각각 `@RestController` , `@Service` , `@Repository` 애노테이션을 가지고 있기 때문에 컴포넌트 스캔의 대상이 된다.
+
+
+### 요구사항 추가
+
+기존 요구사항
+모든 PUBLIC 메서드의 호출과 응답 정보를 로그로 출력 애플리케이션의 흐름을 변경하면 안됨
+로그를 남긴다고 해서 비즈니스 로직의 동작에 영향을 주면 안됨 메서드 호출에 걸린 시간
+정상 흐름과 예외 흐름 구분
+예외 발생시 예외 정보가 남아야 함 메서드 호출의 깊이 표현
+HTTP 요청을 구분
+HTTP 요청 단위로 특정 ID를 남겨서 어떤 HTTP 요청에서 시작된 것인지 명확하게 구분이 가능해야 함
+트랜잭션 ID (DB 트랜잭션X)
