@@ -4,7 +4,8 @@ Http 프로토콜 및 웹 계층의 여러 규약
 
 ### 인터넷 네트워크
 
-* [IP(인터넷 프로토콜)](./http/ip.md)
+* [IP(인터넷 프로토콜)](./http/network/ip.md)
+* [TCP, UDP](./http/network/tcp_udp.md)
 
 ### HTTP 메서드
 
