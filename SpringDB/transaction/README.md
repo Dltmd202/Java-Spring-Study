@@ -1309,10 +1309,12 @@ public class MemberServiceV2 {
 }
 ```
 
-* Connection con = dataSource.getConnection();
+* `Connection con = dataSource.getConnection();`
 * 트랜잭션을 시작하려면 커넥션이 필요하다.
-* con.setAutoCommit(false); //트랜잭션 시작
-  트랜잭션을 시작하려면 자동 커밋 모드를 꺼야한다. 이렇게 하면 커넥션을 통해 세션에 set autocommit false 가 전달되고, 이후부터는 수동 커밋 모드로 동작한다. 이렇게 자동 커밋 모드를 수동 커밋 모드로 변경하는 것을 트랜잭션을 시작한다고 보통 표현한다.
+* `con.setAutoCommit(false);` //트랜잭션 시작
+  트랜잭션을 시작하려면 자동 커밋 모드를 꺼야한다. 이렇게 하면 커넥션을 통해 
+  세션에 `set autocommit false` 가 전달되고, 이후부터는 수동 커밋 모드로 동작한다. 
+  이렇게 자동 커밋 모드를 수동 커밋 모드로 변경하는 것을 트랜잭션을 시작한다고 보통 표현한다.
 
 
 * `bizLogic(con, fromId, toId, money);`
@@ -1328,3 +1330,105 @@ public class MemberServiceV2 {
     사용하면 `con.close()` 를 호출 했을 때 커넥션이 종료되는 것이 아니라 풀에 반납된다. 
     현재 수동 커밋 모드로 동작하기 때문에 풀에 돌려주기 전에 기본 값인 자동 커밋 모드로 변경하는 것이 안전하다.
 
+
+#### MemberServiceV2Test
+
+```java
+package hello.jdbc.service;
+
+import hello.jdbc.domain.Member;
+import hello.jdbc.repository.MemberRepositoryV1;
+import hello.jdbc.repository.MemberRepositoryV2;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+
+import java.sql.SQLException;
+
+import static hello.jdbc.connection.ConnectionConst.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.*;
+
+class MemberServiceV2Test {
+    public static final String MEMBER_A = "memberA";
+    public static final String MEMBER_B = "memberB";
+    public static final String MEMBER_EX = "ex";
+
+    private MemberRepositoryV2 memberRepository;
+    private MemberServiceV2 memberService;
+
+    @BeforeEach
+    void before() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource(URL, USERNAME, PASSSWORD);
+        memberRepository = new MemberRepositoryV2(dataSource);
+        memberService = new MemberServiceV2(dataSource, memberRepository);
+    }
+
+    @AfterEach
+    void after() throws SQLException{
+        memberRepository.delete(MEMBER_A);
+        memberRepository.delete(MEMBER_B);
+        memberRepository.delete(MEMBER_EX);
+    }
+
+    @Test
+    @DisplayName("정상 이체")
+    void accountTransfer() throws SQLException{
+        //given
+        Member memberA = new Member(MEMBER_A, 10000);
+        Member memberB = new Member(MEMBER_B, 10000);
+        memberRepository.save(memberA);
+        memberRepository.save(memberB);
+
+        //when
+        memberService.accountTransfer(memberA.getMemberId(), memberB.getMemberId(), 2000);
+
+        //then
+        Member findMemberA = memberRepository.findById(memberA.getMemberId());
+        Member findMemberB = memberRepository.findById(memberB.getMemberId());
+        assertThat(findMemberA.getMoney()).isEqualTo(8000);
+        assertThat(findMemberB.getMoney()).isEqualTo(12000);
+    }
+
+    @Test
+    public void accountTransferEx() throws Exception {
+        //given
+        Member memberA = new Member(MEMBER_A, 10000);
+        Member memberEx = new Member(MEMBER_EX, 10000);
+        memberRepository.save(memberA);
+        memberRepository.save(memberEx);
+
+        //when
+        assertThatThrownBy(() ->
+                memberService.accountTransfer(memberA.getMemberId(), memberEx.getMemberId(), 2000))
+                .isInstanceOf(IllegalStateException.class);
+        //then
+        Member findMemberA = memberRepository.findById(memberA.getMemberId());
+        Member findMemberEx = memberRepository.findById(memberEx.getMemberId());
+
+        assertThat(findMemberA.getMoney()).isEqualTo(10000);
+        assertThat(findMemberEx.getMoney()).isEqualTo(10000);
+    }
+}
+```
+
+#### 정상이체 - accountTransfer()
+
+#### 이체중 예외 발생 - accountTransferEx() 
+
+* 다음 데이터를 저장해서 테스트를 준비한다.
+  * `memberA` 10000원
+  * `memberEx` 10000원 
+* 계좌이체 로직을 실행한다.
+  * `memberService.accountTransfer()` 를 실행한다. 
+  * 커넥션을 생성하고 트랜잭션을 시작한다.
+  * `memberA` -> `memberEx` 로 2000원 계좌이체 한다.
+    * `memberA` 의 금액이 2000원 감소한다.
+    * `memberEx` 회원의 ID는 ex 이므로 중간에 예외가 발생한다.
+  * 예외가 발생했으므로 트랜잭션을 롤백한다.
+* 계좌이체는 실패했다. 롤백을 수행해서 `memberA` 의 돈이 기존 10000원으로 복구되었다.
+* `memberA` 10000원 - 트랜잭션 롤백으로 복구된다.
+* `memberB` 10000원 - 중간에 실패로 로직이 수행되지 않았다. 따라서 그대로 10000원으로 남아있게 된다
