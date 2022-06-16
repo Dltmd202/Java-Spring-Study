@@ -6,6 +6,7 @@ Http 프로토콜 및 웹 계층의 여러 규약
 
 * [IP(인터넷 프로토콜)](./http/network/ip.md)
 * [TCP, UDP](./http/network/tcp_udp.md)
+* [DNS](./http/network/dns.md)
 
 ### HTTP 메서드
 
