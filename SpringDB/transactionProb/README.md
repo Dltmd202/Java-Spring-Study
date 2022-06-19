@@ -1041,3 +1041,251 @@ void before() {
   * `java.sql.SQLException` 이 아직 남아있지만 이 부분은 뒤에 예외 문제에서 해결하자. 
 * 트랜잭션 동기화 매니저 덕분에 커넥션을 파라미터로 넘기지 않아도 된다.
 
+
+## 트랜잭션 문제 해결 - 트랜잭션 템플릿
+
+
+#### 트랜잭션 사용 코드
+
+```java
+//트랜잭션 시작
+TransactionStatus status = transactionManager.getTransaction(new DefaultTransactionDefinition());
+
+try{
+    //비즈니스 로직
+    bizLogic(fromId, toId, money);
+    transactionManager.commit(status);
+} catch (Exception e){
+    transactionManager.rollback(status);
+    throw new IllegalStateException();
+}
+```
+
+* 트랜잭션을 시작하고, 비즈니스 로직을 실행하고, 성공하면 커밋하고, 예외가 발생해서 실패하면 롤백한다. 
+* 다른 서비스에서 트랜잭션을 시작하려면 `try` , `catch` , `finally` 를 포함한 성공시 커밋, 실패시 롤백 코드가 반복될 것이다.
+* 이런 형태는 각각의 서비스에서 반복된다. 달라지는 부분은 비즈니스 로직 뿐이다.
+* 이럴 때 템플릿 콜백 패턴을 활용하면 이런 반복 문제를 깔끔하게 해결할 수 있다.
+
+
+### 트랜잭션 템플릿
+
+템플릿 콜백 패턴을 적용하려면 템플릿을 제공하는 클래스를 작성해야 하는데, 스프링은 `TransactionTemplate` 라는 템플릿 클래스를 제공한다.
+
+
+#### TransactionTemplate
+
+```java
+package org.springframework.transaction.support;
+
+import java.lang.reflect.UndeclaredThrowableException;
+
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
+import org.springframework.beans.factory.InitializingBean;
+import org.springframework.lang.Nullable;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionException;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.TransactionSystemException;
+import org.springframework.util.Assert;
+
+@SuppressWarnings("serial")
+public class TransactionTemplate extends DefaultTransactionDefinition
+		implements TransactionOperations, InitializingBean {
+    
+	protected final Log logger = LogFactory.getLog(getClass());
+
+	@Nullable
+	private PlatformTransactionManager transactionManager;
+    
+	public TransactionTemplate() {
+	}
+
+	public TransactionTemplate(PlatformTransactionManager transactionManager) {
+		this.transactionManager = transactionManager;
+	}
+    
+	public TransactionTemplate(PlatformTransactionManager transactionManager, TransactionDefinition transactionDefinition) {
+		super(transactionDefinition);
+		this.transactionManager = transactionManager;
+	}
+    
+	public void setTransactionManager(@Nullable PlatformTransactionManager transactionManager) {
+		this.transactionManager = transactionManager;
+	}
+    
+	@Nullable
+	public PlatformTransactionManager getTransactionManager() {
+		return this.transactionManager;
+	}
+
+	@Override
+	public void afterPropertiesSet() {
+		if (this.transactionManager == null) {
+			throw new IllegalArgumentException("Property 'transactionManager' is required");
+		}
+	}
+
+
+	@Override
+	@Nullable
+	public <T> T execute(TransactionCallback<T> action) throws TransactionException {
+		Assert.state(this.transactionManager != null, "No PlatformTransactionManager set");
+
+		if (this.transactionManager instanceof CallbackPreferringPlatformTransactionManager) {
+			return ((CallbackPreferringPlatformTransactionManager) this.transactionManager).execute(this, action);
+		}
+		else {
+			TransactionStatus status = this.transactionManager.getTransaction(this);
+			T result;
+			try {
+				result = action.doInTransaction(status);
+			}
+			catch (RuntimeException | Error ex) {
+				// Transactional code threw application exception -> rollback
+				rollbackOnException(status, ex);
+				throw ex;
+			}
+			catch (Throwable ex) {
+				// Transactional code threw unexpected exception -> rollback
+				rollbackOnException(status, ex);
+				throw new UndeclaredThrowableException(ex, "TransactionCallback threw undeclared checked exception");
+			}
+			this.transactionManager.commit(status);
+			return result;
+		}
+	}
+    
+	private void rollbackOnException(TransactionStatus status, Throwable ex) throws TransactionException {
+		Assert.state(this.transactionManager != null, "No PlatformTransactionManager set");
+
+		logger.debug("Initiating transaction rollback on application exception", ex);
+		try {
+			this.transactionManager.rollback(status);
+		}
+		catch (TransactionSystemException ex2) {
+			logger.error("Application exception overridden by rollback exception", ex);
+			ex2.initApplicationException(ex);
+			throw ex2;
+		}
+		catch (RuntimeException | Error ex2) {
+			logger.error("Application exception overridden by rollback exception", ex);
+			throw ex2;
+		}
+	}
+
+
+	@Override
+	public boolean equals(@Nullable Object other) {
+		return (this == other || (super.equals(other) && (!(other instanceof TransactionTemplate) ||
+				getTransactionManager() == ((TransactionTemplate) other).getTransactionManager())));
+	}
+
+}
+```
+
+
+* `execute()` : 응답 값이 있을 때 사용한다. 
+* `executeWithoutResult()` : 응답 값이 없을 때 사용한다.
+
+
+#### MemberServiceV3_2
+
+```java
+package hello.jdbc.service;
+
+import hello.jdbc.domain.Member;
+import hello.jdbc.repository.MemberRepositoryV3;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.DefaultTransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.sql.Connection;
+import java.sql.SQLException;
+
+/**
+ * 트랜잭션 - 트랜잭션 템플릿
+ */
+@Slf4j
+public class MemberServiceV3_2 {
+
+    private final TransactionTemplate txTemplate;
+    private final MemberRepositoryV3 memberRepository;
+
+    public MemberServiceV3_2(PlatformTransactionManager transactionManager, MemberRepositoryV3 memberRepository) {
+        this.txTemplate = new TransactionTemplate(transactionManager);
+        this.memberRepository = memberRepository;
+    }
+
+    public void accountTransfer(String fromId, String toId, int money) throws SQLException{
+        txTemplate.executeWithoutResult((status) -> {
+            try{
+                bizLogic(fromId, toId, money);
+            } catch (SQLException e){
+                throw new IllegalStateException(e);
+            }
+        });
+    }
+
+    private void bizLogic(String fromId, String toId, int money) throws SQLException {
+        Member fromMember = memberRepository.findById(fromId);
+        Member toMember = memberRepository.findById(toId);
+
+        memberRepository.update(fromId, fromMember.getMoney() - money);
+        validation(toMember);
+        memberRepository.update(toId, toMember.getMoney() + money);
+    }
+
+    private void release(Connection con) {
+        if(con != null){
+            try{
+                con.setAutoCommit(true);
+                con.close();
+            } catch (Exception e){
+                log.info("error", e);
+            }
+        }
+    }
+
+    private void validation(Member toMember){
+        if(toMember.getMemberId().equals("ex")){
+            throw new IllegalStateException("이체중 예외 발생");
+        }
+    }
+}
+```
+
+* `TransactionTemplate` 을 사용하려면 `transactionManager` 가 필요하다. 
+  생성자에서 `transactionManager` 를 주입 받으면서 `TransactionTemplate` 을 생성했다.
+
+
+### 트랜잭션 템플릿 사용 로직
+
+```java
+txTemplate.executeWithoutResult((status) -> {
+    try{
+        bizLogic(fromId, toId, money);
+    } catch (SQLException e){
+        throw new IllegalStateException(e);
+    }
+});
+```
+
+* 트랜잭션 템플릿 덕분에 트랜잭션을 시작하고, 커밋하거나 롤백하는 코드가 모두 제거되었다. 
+* 트랜잭션 템플릿의 기본 동작은 다음과 같다.
+  * 비즈니스 로직이 정상 수행되면 커밋한다.
+  * 언체크 예외가 발생하면 롤백한다. 그 외의 경우 커밋한다.
+* 코드에서 예외를 처리하기 위해 `try~catch` 가 들어갔는데, `bizLogic()` 메서드를 호출하면 
+  `SQLException` 체크 예외를 넘겨준다. 해당 람다에서 체크 예외를 밖으로 던질 수 없기 때문에 언체크 예외로 바꾸어 던지도록 예외를 전환했다.
+
+
+#### MemberServiceV3_2Test
+
+```java
+
+```
