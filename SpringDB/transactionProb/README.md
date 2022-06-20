@@ -1760,7 +1760,28 @@ spring.datasource.password=1234
 ### 데이터소스, 트랜잭션 매니저 직접 등록
 
 ```java
+    @TestConfiguration
+    static class TestConfig{
+        @Bean
+        DataSource dataSource(){
+            return new DriverManagerDataSource(URL, USERNAME, PASSSWORD);
+        }
 
+        @Bean
+        PlatformTransactionManager transactionManager(){
+            return new DataSourceTransactionManager(dataSource());
+        }
+
+        @Bean
+        MemberRepositoryV3 memberRepositoryV3() {
+            return new MemberRepositoryV3(dataSource());
+        }
+
+        @Bean
+        MemberServiceV3_3 memberServiceV3_3(){
+            return new MemberServiceV3_3(memberRepositoryV3());
+        }
+    }
 ```
 
 ### 데이터소스와 트랜잭션 매니저 자동 등록
