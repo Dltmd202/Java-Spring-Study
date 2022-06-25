@@ -631,3 +631,209 @@ void method() throws Exception {..}
 따라서 꼭 필요한 경우가 아니면 이렇게 `Exception` 자체를 밖으로 던지는 것은 좋지 않은 방법이다.
 
 
+## 언체크 예외 활용
+
+
+이번에는 런타임 예외를 사용해보자.
+
+
+### 런타임 예외 사용 - 그림
+
+
+![](res/img_5.png)
+
+
+* `SQLException` 을 런타임 예외인 `RuntimeSQLException` 으로 변환했다.
+* `ConnectException` 대신에 `RuntimeConnectException` 을 사용하도록 바꾸었다.
+* 런타임 예외이기 때문에 서비스, 컨트롤러는 해당 예외들을 처리할 수 없다면 별도의 선언 없이 그냥 두면 된다.
+
+
+### 런타임 예외 사용 변환 - 코드 - UncheckedAppTest
+
+```java
+package hello.jdbc.exception.basic;
+
+import org.assertj.core.api.Assertions;
+import org.junit.jupiter.api.Test;
+
+import java.net.ConnectException;
+import java.sql.SQLException;
+
+public class UnCheckedAppTest {
+
+    @Test
+    public void unchecked() throws Exception {
+        Controller controller = new Controller();
+        Assertions.assertThatThrownBy(() -> controller.request())
+                .isInstanceOf(Exception.class);
+    }
+
+    static class Controller{
+        Service service = new Service();
+
+        public void request() {
+            service.logic();
+        }
+    }
+
+    static class Service{
+
+        Repository repository = new Repository();
+        NetworkClient networkClient = new NetworkClient();
+
+        public void logic() {
+            repository.call();
+            networkClient.call();
+        }
+
+    }
+
+    static class NetworkClient{
+        public void call() {
+            throw new RuntimeConnectException("연결 실패");
+        }
+    }
+
+    static class Repository{
+        public void call() {
+            try {
+                runSQL();
+            } catch (SQLException e) {
+                throw new RuntimeSQLException(e);
+            }
+        }
+
+        public void runSQL() throws SQLException{
+            throw new SQLException("ex");
+        }
+    }
+
+    static class RuntimeConnectException extends RuntimeException{
+        public RuntimeConnectException(String message) {
+            super(message);
+        }
+    }
+
+    static class RuntimeSQLException extends RuntimeException{
+        public RuntimeSQLException(String message) {
+            super(message);
+        }
+
+        public RuntimeSQLException(Throwable cause) {
+            super(cause);
+        }
+    }
+}
+```
+
+#### 예외 전환
+
+* 리포지토리에서 체크 예외인 `SQLException` 이 발생하면 런타임 예외인 
+  `RuntimeSQLException` 으로 전환해서 예외를 던진다.
+  * 참고로 이때 기존 예외를 포함해주어야 예외 출력시 스택 트레이스에서 
+    기존 예외도 함께 확인할 수 있다. 예외 포함에 대한 부분은 조금 뒤에 더 
+    자세히 설명한다. 
+* `NetworkClient` 는 단순히 기존 체크 예외를 `RuntimeConnectException` 
+  이라는 런타임 예외가 발생하도록 코드를 바꾸었다.
+
+
+#### 런타임 예외 - 대부분 복구 불가능한 예외
+
+
+시스템에서 발생한 예외는 대부분 복구 불가능 예외이다. 
+런타임 예외를 사용하면 서비스나 컨트롤러가 이런 복구 불가능한 예외를 신경쓰지 않아도
+된다. 물론 이렇게 복구 불가능한 예외는 일관성 있게 공통으로 처리해야 한다.
+
+
+#### 런타임 예외 - 의존 관계에 대한 문제
+런타임 예외는 해당 객체가 처리할 수 없는 예외는 무시하면 된다. 
+따라서 체크 예외 처럼 예외를 강제로 의존하지 않아도 된다.
+
+
+#### 런타임 예외 throws 생략
+
+```java
+static class Controller{
+    Service service = new Service();
+
+    public void request() {
+        service.logic();
+    }
+}
+
+static class Service{
+
+    Repository repository = new Repository();
+    NetworkClient networkClient = new NetworkClient();
+
+    public void logic() {
+        repository.call();
+        networkClient.call();
+    }
+}
+```
+
+런타임 예외이기 때문에 컨트롤러나 서비스가 예외를 처리할 수 없다면 다음 부분을 생략할 수 있다. 
+
+
+* `method() throws RuntimeSQLException, RuntimeConnectException`
+* 따라서 컨트롤러와 서비스에서 해당 예외에 대한 의존 관계가 발생하지 않는다.
+
+
+### 체크 예외 구현 기술 변경시 파급 효과
+
+![](./res/img_6.png)
+
+
+* 런타임 예외를 사용하면 중간에 기술이 변경되어도 해당 예외를 사용하지 않는 컨트롤러, 서비스에서는 코드를 변경하지 않아도 된다.
+* 구현 기술이 변경되는 경우, 예외를 공통으로 처리하는 곳에서는 예외에 따른 다른 처리가 필요할 수 있다. 하지만 공통 처리하는 한곳만 변경하면 
+  되기 때문에 변경의 영향 범위는 최소화 된다.
+
+
+## 예외 포함과 스택 트레이스
+
+예외를 전환할 때는 꼭! 기존 예외를 포함해야 한다. 그렇지 않으면 스택 트레이스를 확인할 때 심각한 문제가 발생한다.
+
+```java
+
+```
+
+
+* 로그를 출력할 때 마지막 파라미터에 예외를 넣어주면 로그에 스택 트레이스를 출력할 수 있다.
+  * 예) `log.info("message={}", "message", ex)` , 여기에서 마지막에 `ex` 를 전달하는 것을 확인할 수 있다. 이렇게 하면 스택 트레이스에 로그를 출력할 수 있다. 
+  * 예) `log.info("ex", ex)` 지금 예에서는 파라미터가 없기 때문에, 예외만 파라미터에 전달하면 스택 트레이스를 로그에 출력할 수 있다.
+* `System.out` 에 스택 트레이스를 출력하려면 `e.printStackTrace()` 를 사용하면 된다. 
+  * 실무에서는 항상 로그를 사용해야 한다는 점을 기억하자.
+
+#### 기존 예외를 포함하는 경우
+
+```java
+public void call() {
+    try {
+        runSQL();
+    } catch (SQLException e) {
+        throw new RuntimeSQLException(e);
+    }
+}
+```
+
+
+예외를 포함해서 기존에 발생한 `java.sql.SQLException` 과 스택 트레이스를 확인할 수 있다.
+
+
+#### 기존 예외를 포함하지 않는 경우
+
+
+```java
+public void call() {                                
+    try {                                           
+        runSQL();                                   
+    } catch (SQLException e) {                      
+        throw new RuntimeSQLException();           
+    }                                               
+}                                                   
+```
+
+
+예외를 포함하지 않아서 기존에 발생한 `java.sql.SQLException` 과 스택 트레이스를 확인할 수 없다. 변환한 RuntimeSQLException 부터 
+예외를 확인할 수 있다. 만약 실제 DB에 연동했다면 DB에서 발생한 예외를 확인할 수 없는 심각한 문제가 발생한다.
