@@ -877,3 +877,269 @@ assertThat(resultEx.getClass()).isEqualTo(BadSqlGrammarException.class);
 * `org.springframework.jdbc.support.sql-error-codes.xml`
 * 스프링 SQL 예외 변환기는 SQL ErrorCode를 이 파일에 대입해서 어떤 스프링 데이터 접근 예외로 전환해야 할지 찾아낸다. 
   H2 데이터베이스에서 `42000` 이 발생하면 `badSqlGrammarCodes` 이기 때문에 `BadSqlGrammarException` 을 반환한다.
+
+## 스프링 예외 추상화 적용
+
+#### MemberRepositoryV4_2
+
+```java
+package hello.jdbc.repository;
+
+import hello.jdbc.domain.Member;
+import hello.jdbc.repository.ex.MyDbException;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.datasource.DataSourceUtils;
+import org.springframework.jdbc.support.JdbcUtils;
+import org.springframework.jdbc.support.SQLErrorCodeSQLExceptionTranslator;
+import org.springframework.jdbc.support.SQLExceptionTranslator;
+
+import javax.sql.DataSource;
+import java.sql.*;
+import java.util.NoSuchElementException;
+
+/**
+ * SQLExceptionTranslator 추가
+ */
+@Slf4j
+public class MemberRepositoryV4_2 implements MemberRepository{
+
+    private final DataSource dataSource;
+    private final SQLExceptionTranslator exTranslator;
+
+    public MemberRepositoryV4_2(DataSource dataSource) {
+        this.dataSource = dataSource;
+        this.exTranslator = new SQLErrorCodeSQLExceptionTranslator(dataSource);
+    }
+
+    @Override
+    public Member save(Member member){
+        String sql = "insert into member(member_id, money) values (?, ?)";
+
+        Connection con = null;
+        PreparedStatement pstmt = null;
+
+
+        try {
+            con = getConnection();
+            pstmt = con.prepareStatement(sql);
+            pstmt.setString(1, member.getMemberId());
+            pstmt.setInt(2, member.getMoney());
+            pstmt.executeUpdate();
+            return member;
+        } catch (SQLException e) {
+            throw exTranslator.translate("save", sql, e);
+        } finally {
+            close(con, pstmt, null);
+        }
+
+    }
+
+    @Override
+    public Member findById(String memberId) {
+        String sql = "select * from member where member_id = ?";
+
+        Connection con = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+
+        try{
+            con = getConnection();
+            pstmt = con.prepareStatement(sql);
+            pstmt.setString(1, memberId);
+            rs = pstmt.executeQuery();
+
+            if(rs.next()){
+                Member member = new Member();
+                member.setMemberId(rs.getString("member_id"));
+                member.setMoney(rs.getInt("money"));
+                return member;
+            } else {
+                throw new NoSuchElementException("member not found memberId =" + memberId);
+            }
+
+        } catch (SQLException e) {
+            throw exTranslator.translate("findById", sql, e);
+        } finally {
+            close(con, pstmt, rs);
+        }
+    }
+
+    @Override
+    public void update(String memberId, int money){
+        String sql = "update member set money=? where member_id=?";
+
+        Connection con = null;
+        PreparedStatement pstmt = null;
+
+        try{
+            con = getConnection();
+            pstmt = con.prepareStatement(sql);
+            pstmt.setInt(1, money);
+            pstmt.setString(2, memberId);
+            int resultSize = pstmt.executeUpdate();
+            log.info("resultSize={}", resultSize);
+        } catch (SQLException e){
+            throw exTranslator.translate("update", sql, e);
+        } finally {
+            close(con, pstmt, null);
+        }
+    }
+
+    @Override
+    public void delete(String memberId){
+        String sql = "delete from member where member_id=?";
+
+        Connection con = null;
+        PreparedStatement pstmt = null;
+
+        try{
+            con = getConnection();
+            pstmt = con.prepareStatement(sql);
+            pstmt.setString(1, memberId);
+
+            pstmt.executeUpdate();
+
+        } catch (SQLException e){
+            throw exTranslator.translate("delete", sql, e);
+        } finally {
+            close(con, pstmt, null);
+        }
+    }
+
+    private void close(Connection con, Statement stmt, ResultSet rs){
+        JdbcUtils.closeResultSet(rs);
+        JdbcUtils.closeStatement(stmt);
+        // 주의! 트랜잭션 동기화를 사용하라면 DataSourceUtils를 사용해야 한다.
+        DataSourceUtils.releaseConnection(con, dataSource);
+    }
+
+    private Connection getConnection() throws SQLException {
+        //주의! 트랜잭션 동기화를 사용하려면 DataSourceUtils를 사용해야 한다.
+        Connection con = DataSourceUtils.getConnection(dataSource);
+        log.info("get connection={}", con);
+        return con;
+    }
+}
+```
+
+기존 코드에서 스프링 예외 변환기를 사용하도록 변경되었다.
+
+
+```java
+catch (SQLException e){
+    throw exTranslator.translate("delete", sql, e);
+} 
+```
+
+
+#### MemberServiceV4Test - 수정
+
+```java
+@Bean
+MemberRepository memberRepository() {
+    return new MemberRepositoryV4_2(dataSource);
+}
+```
+
+
+* `MemberRepository` 인터페이스가 제공되므로 스프링 빈에 등록할 빈만 `MemberRepositoryV4_1` 에서 `MemberRepositoryV4_2` 로 
+  교체하면 리포지토리를 변경해서 테스트를 확인할 수 있다.
+
+
+## JDBC 반복 문제 해결 - JdbcTemplate
+
+#### JDBC 반복 문제
+
+* 커넥션 조회, 커넥션 동기화 
+* `PreparedStatement` 생성 및 파라미터 바인딩 쿼리 실행 
+* 결과 바인딩 
+* 예외 발생시 스프링 예외 변환기 실행 
+* 리소스 종료
+
+
+리포지토리의 각각의 메서드를 살펴보면 상당히 많은 부분이 반복된다. 
+이런 반복을 효과적으로 처리하는 방법이 바로 템플릿 콜백 패턴이다.
+스프링은 JDBC의 반복 문제를 해결하기 위해 `JdbcTemplate` 이라는 템플릿을 제공한다. 
+
+
+
+#### MemberRepositoryV5
+
+```java
+package hello.jdbc.repository;
+
+import hello.jdbc.domain.Member;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+
+import javax.sql.DataSource;
+
+/**
+ * JdbcTemplate 사용
+ */
+@Slf4j
+public class MemberRepositoryV5 implements MemberRepository{
+
+    private final JdbcTemplate template;
+
+    public MemberRepositoryV5(DataSource dataSource) {
+        template = new JdbcTemplate(dataSource);
+    }
+
+    @Override
+    public Member save(Member member){
+        String sql = "insert into member(member_id, money) values (?, ?)";
+        template.update(sql, member.getMemberId(), member.getMemberId());
+        return member;
+    }
+
+    @Override
+    public Member findById(String memberId) {
+        String sql = "select * from member where member_id = ?";
+        return template.queryForObject(sql, memberRowMapper(), memberId);
+    }
+
+    private RowMapper<Member> memberRowMapper() {
+        return (rs, rowNum) -> {
+            Member member = new Member();
+            member.setMemberId(rs.getString("member_id"));
+            member.setMoney(rs.getInt("money"));
+            return member;
+        };
+    }
+
+    @Override
+    public void update(String memberId, int money){
+        String sql = "update member set money=? where member_id=?";
+        template.update(sql, money, memberId);
+    }
+
+    @Override
+    public void delete(String memberId){
+        String sql = "delete from member where member_id=?";
+        template.update(sql, memberId);
+    }
+
+}
+```
+
+#### MemberServiceV4Test - 수정
+
+```java
+@Bean
+MemberRepository memberRepository() {
+    return new MemberRepositoryV5(dataSource);
+}
+```
+
+
+`MemberRepository` 인터페이스가 제공되므로 등록하는 빈만 MemberRepositoryV5 로 변경해서
+등록하면 된다.
+
+
+
+`JdbcTemplate` 은 JDBC로 개발할 때 발생하는 반복을 대부분 해결해준다. 
+그 뿐만 아니라 지금까지 학습했던, 트랜잭션을 위한 커넥션 동기화는 물론이고, 예외 발생시 스프링 예외 변환기도 자동으로 실행해준다.
+
+
