@@ -768,3 +768,194 @@ public void cacheProxyTest() {
 * 3. client의 cacheProxy 호출 -> cacheProxy에 캐시 값이 있다. -> cacheProxy에서 즉시 반환 (0초) 
 
 결과적으로 캐시 프록시를 도입하기 전에는 3초가 걸렸지만, 캐시 프록시 도입 이후에는 최초에 한번만 1 초가 걸리고, 이후에는 거의 즉시 반환한다.
+
+
+## 데코레이터 패턴 - 예제 코드1
+
+![](res/img_10.png)
+
+
+![](res/img_11.png)
+
+
+#### Component 인터페이스
+
+```java
+package hello.proxy.decorator.code;
+
+public interface Component {
+  String operation();
+}
+```
+
+`Component` 인터페이스는 단순히 `String operation()` 메서드를 가진다.
+
+
+#### RealComponent
+
+```java
+package hello.proxy.decorator.code;
+
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+public class RealComponent implements Component{
+
+    @Override
+    public String operation() {
+        log.info("RealComponent 생성");
+        return "data";
+    }
+}
+```
+
+
+* `RealComponent` 는 `Component` 인터페이스를 구현한다. 
+* `operation()` : 단순히 로그를 남기고 "data" 문자를 반환한다.
+
+
+#### DecoratorPatternClient
+
+```java
+package hello.proxy.decorator.code;
+
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+public class DecoratorPatternClient {
+
+    private Component component;
+
+    public DecoratorPatternClient(Component component) {
+        this.component = component;
+    }
+
+    public void execute(){
+        String result = component.operation();
+        log.info("result = {}", result);
+    }
+}
+```
+
+* 클라이언트 코드는 단순히 `Component` 인터페이스를 의존한다.
+* `execute()` 를 실행하면 `component.operation()` 을 호출하고, 그 결과를 출력한다.
+
+
+#### DecoratorPatternTest
+
+```java
+package hello.proxy.decorator;
+
+import hello.proxy.decorator.code.DecoratorPatternClient;
+import hello.proxy.decorator.code.RealComponent;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Test;
+
+@Slf4j
+public class DecoratorPatternTest {
+
+    @Test
+    public void noDecorator() {
+        RealComponent realComponent = new RealComponent();
+        DecoratorPatternClient decoratorPatternClient = new DecoratorPatternClient(realComponent);
+        decoratorPatternClient.execute();
+    }
+}
+```
+
+테스트 코드는 `client -> realComponent` 의 의존관계를 설정하고, `client.execute()` 를 호출한다.
+
+
+#### 실행 결과
+
+```text
+22:59:31.759 [Test worker] INFO hello.proxy.decorator.code.RealComponent - RealComponent 생성
+22:59:31.762 [Test worker] INFO hello.proxy.decorator.code.DecoratorPatternClient - result = data
+```
+
+#### 데코레이터 패턴 - 예제 코드2
+
+
+
+#### 부가 기능 추가
+
+프록시를 활용해서 부가 기능을 추가한다. 프록시로 부가 기능을 추가하는 것을 데코레이터 패턴이라 한다.
+
+
+데코레이터 패턴: 원래 서버가 제공하는 기능에 더해서 부가 기능을 수행한다. 
+
+* 예) 요청 값이나, 응답 값을 중간에 변형한다. 
+* 예) 실행 시간을 측정해서 추가 로그를 남긴다.
+
+
+#### 응답 값을 꾸며주는 데코레이터
+
+응답 값을 꾸며주는 데코레이터 프록시를 만들어보자.
+
+
+![](res/img_12.png)
+
+
+![](res/img_13.png)
+
+
+#### MessageDecorator
+
+```java
+package hello.proxy.decorator.code;
+
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+public class MessageDecorator implements Component{
+
+    private Component component;
+
+    public MessageDecorator(Component component) {
+        this.component = component;
+    }
+
+    @Override
+    public String operation() {
+        log.info("MessageDecorator 실행");
+
+        String result = component.operation();
+        String decoResult = "*****" + result + "*****";
+
+        log.info("MessageDecorator 꾸미기 적용 전 = {}, 적용 후 = {}", result, decoResult);
+        return decoResult;
+    }
+}
+```
+
+
+`MessageDecorator` 는 `Component` 인터페이스를 구현한다.
+프록시가 호출해야 하는 대상을 `component` 에 저장한다.
+`operation()` 을 호출하면 프록시와 연결된 대상을 호출(`component.operation()`) 하고, 그 응답 값에 
+`*****` 을 더해서 꾸며준 다음 반환한다.
+
+
+* 꾸미기 전: `data`
+* 꾸민 후 : `*****data*****`
+
+
+#### DecoratorPatternTest - 추가
+
+```java
+@Test
+public void decorator1() {
+    RealComponent realComponent = new RealComponent();
+    MessageDecorator messageDecorator = new MessageDecorator(realComponent);
+    DecoratorPatternClient client = new DecoratorPatternClient(messageDecorator);
+    client.execute();
+}
+```
+
+`client -> messageDecorator -> realComponent` 의 객체 의존 관계를 만들고 `client.execute()` 를 호출한다.
+
+
+#### 실행 결과
+
+실행 결과를 보면 `MessageDecorator` 가 `RealComponent` 를 호출하고 반환한 응답 메시지를 꾸며서 반환한 것을 확인할 수 있다.
+
+
