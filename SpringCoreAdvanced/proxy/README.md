@@ -945,7 +945,7 @@ public class MessageDecorator implements Component{
 @Test
 public void decorator1() {
     RealComponent realComponent = new RealComponent();
-    MessageDecorator messageDecorator = new MessageDecorator(realComponent);
+    MessageDecorator messageDec orator = new MessageDecorator(realComponent);
     DecoratorPatternClient client = new DecoratorPatternClient(messageDecorator);
     client.execute();
 }
