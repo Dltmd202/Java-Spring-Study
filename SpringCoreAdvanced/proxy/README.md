@@ -959,3 +959,81 @@ public void decorator1() {
 실행 결과를 보면 `MessageDecorator` 가 `RealComponent` 를 호출하고 반환한 응답 메시지를 꾸며서 반환한 것을 확인할 수 있다.
 
 
+## 데코레이터 패턴 - 예제 코드3
+
+#### 실행 시간을 측정하는 데코레이터
+
+![](res/img_14.png)
+
+
+![](res/img_15.png)
+
+
+#### TimeDecorator
+
+```java
+package hello.proxy.decorator.code;
+
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+public class TimeDecorator implements Component{
+
+    private Component component;
+
+    public TimeDecorator(Component component){
+        this.component = component;
+    }
+
+    @Override
+    public String operation() {
+        log.info("TimeDecorator 실행");
+        long startTime = System.currentTimeMillis();
+        String result = component.operation();
+        long endTime = System.currentTimeMillis();
+        long resultTime = endTime - startTime;
+        log.info("TimeDecorator 종료 resultTime={}ms", resultTime);
+        return result;
+    }
+}
+```
+
+
+`TimeDecorator` 는 실행 시간을 측정하는 부가 기능을 제공한다. 
+대상을 호출하기 전에 시간을 가지고 있다가, 대상의 호출이 끝나면 호출 시간을 로그로 남겨준다.
+
+
+
+#### DecoratorPatternTest - 추가
+
+```java
+@Test
+public void decorator2() {
+    Component realComponent = new RealComponent();
+    Component messageDecorator = new MessageDecorator(realComponent);
+    Component timeDecorator = new TimeDecorator(messageDecorator);
+    DecoratorPatternClient client = new DecoratorPatternClient(timeDecorator);
+    client.execute();
+}
+```
+
+
+`client -> timeDecorator -> messageDecorator -> realComponent` 의 객체 의존관계를 설정하고, 실행한다.
+
+
+#### 실행 결과
+
+```text
+17:20:56.016 [Test worker] INFO hello.proxy.decorator.code.TimeDecorator - TimeDecorator 실행
+17:20:56.017 [Test worker] INFO hello.proxy.decorator.code.MessageDecorator - MessageDecorator 실행
+17:20:56.017 [Test worker] INFO hello.proxy.decorator.code.RealComponent - RealComponent 생성
+17:20:56.021 [Test worker] INFO hello.proxy.decorator.code.MessageDecorator - MessageDecorator 꾸미기 적용 전 = data, 적용 후 = *****data*****
+17:20:56.022 [Test worker] INFO hello.proxy.decorator.code.TimeDecorator - TimeDecorator 종료 resultTime=5ms
+17:20:56.022 [Test worker] INFO hello.proxy.decorator.code.DecoratorPatternClient - result = *****data*****
+```
+
+
+실행 결과를 보면 `TimeDecorator` 가 `MessageDecorator` 를 실행하고 실행 시간을 측정해서 출력한 것을 확인할 수 있다.
+
+
+
