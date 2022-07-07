@@ -1,0 +1,18 @@
+spring:
+  main:
+    allow-circular-references: true
+  profiles:
+    include: db, jwt, cloud
+
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+
+  data:
+    web:
+      pageable:
+        default-page-size: 10
+        max-page-size: 2000
+
+logging.level:
+  org.hibernate.SQL: debug

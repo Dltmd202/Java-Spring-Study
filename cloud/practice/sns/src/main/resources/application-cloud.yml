@@ -1,0 +1,7 @@
+cloud:
+  aws:
+    s3:
+      bucket:
+
+file:
+  dir: "${pwd}/../"
