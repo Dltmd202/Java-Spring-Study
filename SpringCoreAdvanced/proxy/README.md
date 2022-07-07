@@ -1330,3 +1330,71 @@ public class ProxyApplication {
 프록시와 DI 덕분에 원본 코드를 전혀 수정하지 않고, 로그 추적기를 도입할 수 있었다. 물론 너무 많은 프록시 클래스를 만들어야 하는 단점이 있기는 하다. 
 이 부분은 나중에 해결하기로 하고, 우선은 v2 - 인터페이스가 없는 구체 클래스에 프록시를 어떻게 적용할 수 있는지 알아보자.
 
+
+## 구체 클래스 기반 프록시 - 예제1
+
+
+### ConcreteLogic
+
+```java
+package hello.proxy.concreteproxy.code;
+
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+public class ConcreteLogic {
+
+    public String operation() {
+        log.info("ConcreteLogic 실헹");
+        return "data";
+    }
+}
+```
+
+
+`ConcreteLogic` 은 인터페이스가 없고, 구체 클래스만 있다. 여기에 프록시를 도입해야 한다.
+
+
+![](res/img_24.png)
+
+![](res/img_25.png)
+
+### ConcreteClient
+
+```java
+package hello.proxy.concreteproxy.code;
+
+public class ConcreteClient {
+
+    private ConcreteLogic concreteLogic;
+
+    public ConcreteClient(ConcreteLogic concreteLogic) {
+        this.concreteLogic = concreteLogic;
+    }
+
+    public void execute(){
+        concreteLogic.operation();
+    }
+}
+```
+
+
+### ConcreteProxyTest
+
+```java
+package hello.proxy.concreteproxy;
+
+import hello.proxy.concreteproxy.code.ConcreteClient;
+import hello.proxy.concreteproxy.code.ConcreteLogic;
+import org.junit.jupiter.api.Test;
+
+public class ConcreteProxyTest {
+
+    @Test
+    public void noProxy() {
+        ConcreteLogic concreteLogic = new ConcreteLogic();
+        ConcreteClient client = new ConcreteClient(concreteLogic);
+        client.execute();
+    }
+}
+```
