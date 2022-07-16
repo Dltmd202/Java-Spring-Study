@@ -1,6 +1,0 @@
-jwt:
-  token:
-    header: Authorization
-    issuer: sidepr
-    client-secret: Rel3Bjce2MajBo09qgkNgYaTuzvJe8iwnBFhsDS5
-    expiry-seconds: 0
