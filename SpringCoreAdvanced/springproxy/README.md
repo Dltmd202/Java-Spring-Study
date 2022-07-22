@@ -73,7 +73,6 @@ package org.aopalliance.intercept;
 public interface MethodInterceptor extends Interceptor {
   Object invoke(MethodInvocation invocation) throws Throwable;
 }
-
 ```
 
 * `MethodInvocation invocation`
@@ -87,7 +86,27 @@ public interface MethodInterceptor extends Interceptor {
 #### TimeAdvice
 
 ```java
+package hello.proxy.common.advice;
 
+import lombok.extern.slf4j.Slf4j;
+import org.aopalliance.intercept.MethodInterceptor;
+import org.aopalliance.intercept.MethodInvocation;
+
+@Slf4j
+public class TimeAdvice implements MethodInterceptor {
+    @Override
+    public Object invoke(MethodInvocation invocation) throws Throwable {
+        log.info("TimeProxy 실행");
+        long startTime = System.currentTimeMillis();
+
+        Object result = invocation.proceed();
+
+        long endTime = System.currentTimeMillis();
+        long resultTime = endTime - startTime;
+        log.info("TimeProxy 종료 resultTime={}", resultTime);
+        return result;
+    }
+}
 ```
 
 * `TimeAdvice` 는 앞서 설명한 `MethodInterceptor` 인터페이스를 구현한다. 패키지 이름에 주의 
@@ -102,7 +121,39 @@ public interface MethodInterceptor extends Interceptor {
 #### ProxyFactoryTest
 
 ```java
+package hello.proxy.proxyfactory;
 
+import hello.proxy.common.advice.TimeAdvice;
+import hello.proxy.common.service.ServiceImpl;
+import hello.proxy.common.service.ServiceInterface;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.aop.support.AopUtils;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+@Slf4j
+public class ProxyFactoryTest {
+
+    @Test
+    @DisplayName("인터페이스가 있으면 JDK 동적 프록시 사용")
+    public void interfaceProxy() {
+        ServiceImpl target = new ServiceImpl();
+        ProxyFactory proxyFactory = new ProxyFactory(target);
+        proxyFactory.addAdvice(new TimeAdvice());
+        ServiceInterface proxy = (ServiceInterface) proxyFactory.getProxy();
+        log.info("targetClass={}", target.getClass());
+        log.info("proxyClass={}", proxy.getClass());
+
+        proxy.save();
+
+        assertThat(AopUtils.isAopProxy(proxy)).isTrue();
+        assertThat(AopUtils.isJdkDynamicProxy(proxy)).isTrue();
+        assertThat(AopUtils.isCglibProxy(proxy)).isFalse();
+    }
+}
 ```
 
 * `new ProxyFactory(target)` : 프록시 팩토리를 생성할 때, 생성자에 프록시의 호출 대상을 함께 넘겨준다. 
