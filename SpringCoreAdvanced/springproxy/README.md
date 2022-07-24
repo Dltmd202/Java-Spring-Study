@@ -501,3 +501,469 @@ static class MyMethodMatcher implements MethodMatcher{
    부가 기능도 적용되지 않는다.
 4. 실제 인스턴스를 호출한다.
 
+
+## 예제 코드3 - 스프링이 제공하는 포인트컷
+
+
+#### AdvisorTest - advisorTest3() 추가
+
+```java
+@Test
+@DisplayName("스프링이 제공하는 포인트컷")
+public void advisorTest3() {
+    ServiceInterface target = new ServiceImpl();
+    ProxyFactory proxyFactory = new ProxyFactory(target);
+    NameMatchMethodPointcut pointcut = new NameMatchMethodPointcut();
+    pointcut.setMappedNames("save");
+    DefaultPointcutAdvisor advisor = new DefaultPointcutAdvisor(pointcut, new TimeAdvice());
+    proxyFactory.addAdvisor(advisor);
+    ServiceInterface proxy = (ServiceInterface) proxyFactory.getProxy();
+
+    proxy.save();
+    proxy.find();
+}
+```
+
+#### NameMatchMethodPointcut 사용 코드
+
+```java
+NameMatchMethodPointcut pointcut = new NameMatchMethodPointcut();
+pointcut.setMappedNames("save");
+```
+
+`NameMatchMethodPointcut` 을 생성하고 `setMappedNames(...)` 으로 메서드 이름을 지정하면
+포인트컷이 완성된다.
+
+### 스프링이 제공하는 포인트컷
+
+스프링은 무수히 많은 포인트컷을 제공한다.
+
+* `NameMatchMethodPointcut` : 메서드 이름을 기반으로 매칭한다. 내부에서는 `PatternMatchUtils` 를 사용한다. 
+* 예) *xxx* 허용 
+* `JdkRegexpMethodPointcut` : JDK 정규 표현식을 기반으로 포인트컷을 매칭한다. 
+* `TruePointcut` : 항상 참을 반환한다. 
+* `AnnotationMatchingPointcut` : 애노테이션으로 매칭한다. 
+* `AspectJExpressionPointcut` : aspectJ 표현식으로 매칭한다.
+
+
+### 가장 중요한 것은 `aspectJ` 표현식
+여기에서 사실 다른 것은 중요하지 않다. 실무에서는 사용하기도 편리하고 기능도 
+가장 많은 `aspectJ` 표현식을 기반으로 사용하는 `AspectJExpressionPointcut` 을 사용하게 된다.
+
+
+## 예제 코드4 - 여러 어드바이저 함께 적용
+
+
+어드바이저는 하나의 포인트컷과 하나의 어드바이스를 가지고 있다.
+만약 여러 어드바이저를 하나의 `target` 에 적용하려면 어떻게 해야할까?
+하나의 `target` 에 여러 어드바이스를 적용하려면 어떻게 해야할까?
+
+
+### 여러 프록시
+
+#### MultiAdvisorTest
+
+```java
+package hello.proxy.advisor;
+
+import hello.proxy.common.advice.TimeAdvice;
+import hello.proxy.common.service.ServiceImpl;
+import hello.proxy.common.service.ServiceInterface;
+import lombok.extern.slf4j.Slf4j;
+import org.aopalliance.intercept.MethodInterceptor;
+import org.aopalliance.intercept.MethodInvocation;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.aop.Pointcut;
+import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.aop.support.DefaultPointcutAdvisor;
+import org.springframework.aop.support.NameMatchMethodPointcut;
+
+@Slf4j
+public class MultiAdvisorTest {
+
+    @Test
+    public void multiAdvisorTest1() {
+        ServiceInterface target = new ServiceImpl();
+        ProxyFactory proxyFactory1 = new ProxyFactory(target);
+        DefaultPointcutAdvisor advisor1 = new DefaultPointcutAdvisor(Pointcut.TRUE, new Advice1());
+        proxyFactory1.addAdvisor(advisor1);
+        ServiceInterface proxy1 = (ServiceInterface) proxyFactory1.getProxy();
+
+        ProxyFactory proxyFactory2 = new ProxyFactory(proxy1);
+        DefaultPointcutAdvisor advisor2 = new DefaultPointcutAdvisor(Pointcut.TRUE, new Advice2());
+        proxyFactory2.addAdvisor(advisor2);
+        ServiceInterface proxy2 = (ServiceInterface) proxyFactory2.getProxy();
+
+        proxy2.save();
+        proxy2.find();
+    }
+
+    static class Advice1 implements MethodInterceptor{
+
+        @Override
+        public Object invoke(MethodInvocation invocation) throws Throwable {
+            log.info("advice1 호출");
+            return invocation.proceed();
+        }
+    }
+
+    static class Advice2 implements MethodInterceptor{
+
+        @Override
+        public Object invoke(MethodInvocation invocation) throws Throwable {
+            log.info("advice2 호출");
+            return invocation.proceed();
+        }
+    }
+}
+
+```
+
+이 코드는 런타임에 다음과 같이 동작한다.
+
+
+![](res/img_8.png)
+
+포인트컷은 `advisor1` , `advisor2` 모두 항상 true 를 반환하도록 설정했다. 따라서 둘다 어드바이스가 적용된다.
+
+
+### 여러 프록시의 문제
+이 방법이 잘못된 것은 아니지만, 프록시를 2번 생성해야 한다는 문제가 있다. 만약 적용해야 하는 어드바이저가 10개라면 10개의 프록시를 생성해야한다.
+
+
+### 하나의 프록시, 여러 어드바이저
+스프링은 이 문제를 해결하기 위해 하나의 프록시에 여러 어드바이저를 적용할 수 있게 만들어두었다.
+
+![](res/img_9.png)
+
+
+#### MultiAdvisorTest - multiAdvisorTest2() 추가
+
+```java
+@Test
+@DisplayName("하나의 프록시, 여러 어드비이저")
+public void multiAdvisorTest2() {
+    DefaultPointcutAdvisor advisor1 = new DefaultPointcutAdvisor(Pointcut.TRUE, new Advice1());
+    DefaultPointcutAdvisor advisor2 = new DefaultPointcutAdvisor(Pointcut.TRUE, new Advice2());
+
+    ServiceInterface target = new ServiceImpl();
+    ProxyFactory proxyFactory = new ProxyFactory(target);
+
+    proxyFactory.addAdvisor(advisor2);
+    proxyFactory.addAdvisor(advisor1);
+    ServiceInterface proxy = (ServiceInterface) proxyFactory.getProxy();
+
+    proxy.save();
+}
+```
+
+프록시 팩토리에 원하는 만큼 `addAdvisor()` 를 통해서 어드바이저를 등록하면 된다. 등록하는 순서대로 `advisor` 가 호출된다. 
+여기서는 `advisor2` , `advisor1` 순서로 등록했다.
+
+![](res/img_10.png)
+
+
+> 중요
+> 
+> 스프링의 AOP를 처음 공부하거나 사용하면, AOP 적용 수 만큼 프록시가 생성된다고 착각하게 된다. 실제 많은 실무 개발자들도 이렇게 생각하는 것을 보았다.
+> 스프링은 AOP를 적용할 때, 최적화를 진행해서 지금처럼 프록시는 하나만 만들고, 하나의 프록시에 여러 어드바이저를 적용한다.
+> 정리하면 하나의 target 에 여러 AOP가 동시에 적용되어도, 스프링의 AOP는 target 마다 하나의 프록시만 생성한다.
+
+
+## 프록시 팩토리 - 적용1
+
+#### LogTraceAdvice
+
+```java
+package hello.proxy.config.v3_proxyfactory;
+
+import hello.proxy.trace.TraceStatus;
+import hello.proxy.trace.logtrace.LogTrace;
+import org.aopalliance.intercept.MethodInterceptor;
+import org.aopalliance.intercept.MethodInvocation;
+
+import java.lang.reflect.Method;
+
+public class LogTraceAdvice implements MethodInterceptor {
+
+    private final LogTrace logTrace;
+
+    public LogTraceAdvice(LogTrace logTrace) {
+        this.logTrace = logTrace;
+    }
+
+    @Override
+    public Object invoke(MethodInvocation invocation) throws Throwable {
+        TraceStatus status = null;
+        try {
+            Method method = invocation.getMethod();
+            String message = method.getDeclaringClass().getSimpleName() + "." + method.getName() + "()";
+            status = logTrace.begin(message);
+
+            Object result = invocation.proceed();
+            logTrace.end(status);
+            return result;
+        } catch (Exception e) {
+            logTrace.exception(status, e);
+            throw e;
+        }
+    }
+}
+```
+
+#### ProxyFactoryConfigV1
+
+```java
+package hello.proxy.config.v3_proxyfactory;
+
+import hello.proxy.app.v1.*;
+import hello.proxy.config.v3_proxyfactory.advice.LogTraceAdvice;
+import hello.proxy.trace.logtrace.LogTrace;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.aop.Advisor;
+import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.aop.support.DefaultPointcutAdvisor;
+import org.springframework.aop.support.NameMatchMethodPointcut;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Slf4j
+@Configuration
+public class ProxyFactoryConfigV1 {
+
+    @Bean
+    public OrderControllerV1 orderControllerV1(LogTrace logTrace){
+        OrderControllerV1 orderController = new OrderControllerV1Impl(orderServiceV1(logTrace));
+        ProxyFactory factory = new ProxyFactory(orderController);
+        factory.addAdvisor(getAdvisor(logTrace));
+        OrderControllerV1 proxy = (OrderControllerV1) factory.getProxy();
+        log.info("ProxyFactory proxy={}, target={}", proxy.getClass(), orderController.getClass());
+        return proxy;
+    }
+
+    @Bean
+    public OrderServiceV1 orderServiceV1(LogTrace logTrace){
+        OrderServiceV1 orderService = new OrderServiceV1Impl(orderRepositoryV1(logTrace));
+        ProxyFactory factory = new ProxyFactory(orderService);
+        factory.addAdvisor(getAdvisor(logTrace));
+        OrderServiceV1 proxy = (OrderServiceV1) factory.getProxy();
+        log.info("ProxyFactory proxy={}, target={}", proxy.getClass(), orderService.getClass());
+        return proxy;
+    }
+    
+    @Bean
+    public OrderRepositoryV1 orderRepositoryV1(LogTrace logTrace){
+        OrderRepositoryV1 orderRepository = new OrderRepositoryV1Impl();
+
+        ProxyFactory factory = new ProxyFactory(orderRepository);
+        factory.addAdvisor(getAdvisor(logTrace));
+        OrderRepositoryV1 proxy = (OrderRepositoryV1) factory.getProxy();
+        log.info("ProxyFactory proxy={}, target={}", proxy.getClass(), orderRepository.getClass());
+        return proxy;
+    }
+    
+    private Advisor getAdvisor(LogTrace logTrace) {
+        NameMatchMethodPointcut pointcut = new NameMatchMethodPointcut();
+        pointcut.setMappedNames("request*", "order*", "save*");
+
+        LogTraceAdvice advice = new LogTraceAdvice(logTrace);
+        return new DefaultPointcutAdvisor(pointcut, advice);
+    }
+}
+```
+
+* 포인트컷은 `NameMatchMethodPointcut` 을 사용한다. 여기에는 심플 매칭 기능이 있어서 `*` 을 매칭할 수 있다.
+  * `request*` , `order*` , `save*` : `request` 로 시작하는 메서드에 포인트컷은 `true` 를 반환한다. 나머지도 같다. 
+  * 이렇게 설정한 이유는 `noLog()` 메서드에는 어드바이스를 적용하지 않기 위해서다. 
+* 어드바이저는 포인트컷( `NameMatchMethodPointcut` ), 어드바이스( `LogTraceAdvice` )를 가지고 있다. 
+* 프록시 팩토리에 각각의 `target` 과 `advisor` 를 등록해서 프록시를 생성한다. 그리고 생성된 프록시를 스프링 빈으로 등록한다.
+
+#### ProxyApplication
+
+```java
+package hello.proxy;
+
+import hello.proxy.config.v3_proxyfactory.ProxyFactoryConfigV1;
+import hello.proxy.trace.logtrace.LogTrace;
+import hello.proxy.trace.logtrace.ThreadLocalLogTrace;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+
+//@Import(AppV1Config.class)
+//@Import({AppV2Config.class, AppV1Config.class})
+//@Import(InterfaceProxyConfig.class)
+//@Import(ConcreteProxyConfig.class)
+//@Import(DynamicProxyBasicConfig.class)
+//@Import(DynamicProxyFilterConfig.class)
+@Import(ProxyFactoryConfigV1.class)
+@SpringBootApplication(scanBasePackages = "hello.proxy.app") //주의
+public class ProxyApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(ProxyApplication.class, args);
+	}
+
+	@Bean
+	public LogTrace logTrace(){
+		return new ThreadLocalLogTrace();
+	}
+}
+```
+
+프록시 팩토리를 통한 ProxyFactoryConfigV1 설정을 등록하고 실행
+
+
+#### 애플리케이션 로딩 로그
+
+```text
+ProxyFactory proxy=class com.sun.proxy.$Proxy50, target=class hello.proxy.app.v1.OrderRepositoryV1Impl
+ProxyFactory proxy=class com.sun.proxy.$Proxy52, target=class hello.proxy.app.v1.OrderServiceV1Impl
+ProxyFactory proxy=class com.sun.proxy.$Proxy53, target=class hello.proxy.app.v1.OrderControllerV1Impl
+```
+
+
+V1 애플리케이션은 인터페이스가 있기 때문에 프록시 팩토리가 JDK 동적 프록시를 적용한다. 
+애플리케이션 로딩 로그를 통해서 JDK 동적 프록시가 적용된 것을 확인할 수 있다.
+
+
+## 프록시 팩토리 - 적용2
+
+이번에는 인터페이스가 없고, 구체 클래스만 있는 v2 애플리케이션에 `LogTrace` 기능을 프록시 팩토리를
+통해서 프록시를 만들어 적용한다.
+
+#### ProxyFactoryConfigV2
+
+```java
+package hello.proxy.config.v3_proxyfactory;
+
+import hello.proxy.app.v1.*;
+import hello.proxy.app.v2.OrderControllerV2;
+import hello.proxy.app.v2.OrderRepositoryV2;
+import hello.proxy.app.v2.OrderServiceV2;
+import hello.proxy.config.v3_proxyfactory.advice.LogTraceAdvice;
+import hello.proxy.trace.logtrace.LogTrace;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.aop.Advisor;
+import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.aop.support.DefaultPointcutAdvisor;
+import org.springframework.aop.support.NameMatchMethodPointcut;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Slf4j
+@Configuration
+public class ProxyFactoryConfigV2 {
+
+  @Bean
+  public OrderControllerV2 orderControllerV1(LogTrace logTrace){
+    OrderControllerV2 orderController = new OrderControllerV2(orderServiceV2(logTrace));
+    ProxyFactory factory = new ProxyFactory(orderController);
+    factory.addAdvisor(getAdvisor(logTrace));
+    OrderControllerV2 proxy = (OrderControllerV2) factory.getProxy();
+    log.info("ProxyFactory proxy={}, target={}", proxy.getClass(), orderController.getClass());
+    return proxy;
+  }
+
+  @Bean
+  public OrderServiceV2 orderServiceV2(LogTrace logTrace){
+    OrderServiceV2 orderService = new OrderServiceV2(orderRepositoryV2(logTrace));
+    ProxyFactory factory = new ProxyFactory(orderService);
+    factory.addAdvisor(getAdvisor(logTrace));
+    OrderServiceV2 proxy = (OrderServiceV2) factory.getProxy();
+    log.info("ProxyFactory proxy={}, target={}", proxy.getClass(), orderService.getClass());
+    return proxy;
+  }
+
+  @Bean
+  public OrderRepositoryV2 orderRepositoryV2(LogTrace logTrace){
+    OrderRepositoryV2 orderRepository = new OrderRepositoryV2();
+
+    ProxyFactory factory = new ProxyFactory(orderRepository);
+    factory.addAdvisor(getAdvisor(logTrace));
+    OrderRepositoryV2 proxy = (OrderRepositoryV2) factory.getProxy();
+    log.info("ProxyFactory proxy={}, target={}", proxy.getClass(), orderRepository.getClass());
+    return proxy;
+  }
+
+  private Advisor getAdvisor(LogTrace logTrace) {
+    NameMatchMethodPointcut pointcut = new NameMatchMethodPointcut();
+    pointcut.setMappedNames("request*", "order*", "save*");
+
+    LogTraceAdvice advice = new LogTraceAdvice(logTrace);
+    return new DefaultPointcutAdvisor(pointcut, advice);
+  }
+}
+```
+
+
+#### ProxyApplication
+
+```java
+package hello.proxy;
+
+import hello.proxy.config.v3_proxyfactory.ProxyFactoryConfigV2;
+import hello.proxy.trace.logtrace.LogTrace;
+import hello.proxy.trace.logtrace.ThreadLocalLogTrace;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+
+//@Import(AppV1Config.class)
+//@Import({AppV2Config.class, AppV1Config.class})
+//@Import(InterfaceProxyConfig.class)
+//@Import(ConcreteProxyConfig.class)
+//@Import(DynamicProxyBasicConfig.class)
+//@Import(DynamicProxyFilterConfig.class)
+//@Import(ProxyFactoryConfigV1.class)
+@Import(ProxyFactoryConfigV2.class)
+@SpringBootApplication(scanBasePackages = "hello.proxy.app") //주의
+public class ProxyApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(ProxyApplication.class, args);
+	}
+
+	@Bean
+	public LogTrace logTrace(){
+		return new ThreadLocalLogTrace();
+	}
+}
+```
+
+#### 애플리케이션 로딩 로그
+
+```text
+ProxyFactory proxy=class hello.proxy.app.v2.OrderRepositoryV2$$EnhancerBySpringCGLIB$$ba44681b, target=class hello.proxy.app.v2.OrderRepositoryV2
+ProxyFactory proxy=class hello.proxy.app.v2.OrderServiceV2$$EnhancerBySpringCGLIB$$e94963e, target=class hello.proxy.app.v2.OrderServiceV2
+ProxyFactory proxy=class hello.proxy.app.v2.OrderControllerV2$$EnhancerBySpringCGLIB$$bc4b8ed1, target=class hello.proxy.app.v2.OrderControllerV2
+```
+
+V2 애플리케이션은 인터페이스가 없고 구체 클래스만 있기 때문에 프록시 팩토리가 CGLIB을 적용한다. 
+애플리케이션 로딩 로그를 통해서 CGLIB 프록시가 적용된 것을 확인할 수 있다.
+
+
+### 정리
+프록시 팩토리 덕분에 개발자는 매우 편리하게 프록시를 생성할 수 있게 되었다.
+추가로 어드바이저, 어드바이스, 포인트컷 이라는 개념 덕분에 어떤 부가 기능을 어디에 적용할 지 명확하게 이해할 수 있었다.
+
+#### 남은 문제
+프록시 팩토리와 어드바이저 같은 개념 덕분에 지금까지 고민했던 문제들은 해결되었다. 
+프록시도 깔끔하게 적용하고 포인트컷으로 어디에 부가 기능을 적용할지도 명확하게 정의할 수 있다. 
+원본 코드를 전혀 손대지 않고 프록시를 통해 부가 기능도 적용할 수 있었다.
+
+#### 문제1 - 너무 많은 설정
+바로 `ProxyFactoryConfigV1` , `ProxyFactoryConfigV2` 와 같은 설정 파일이 지나치게 많다는 점이다. 
+예를 들어서 애플리케이션에 스프링 빈이 100개가 있다면 여기에 프록시를 통해 부가 기능을 적용하려면 100개의 동적 프록시 생성 코드를 만들어야 한다! 
+무수히 많은 설정 파일 때문에 설정 지옥을 경험하게 될 것이다.
+최근에는 스프링 빈을 등록하기 귀찮아서 컴포넌트 스캔까지 사용하는데, 이렇게 직접 등록하는 것도 모자라서, 
+프록시를 적용하는 코드까지 빈 생성 코드에 넣어야 한다.
+
+#### 문제2 - 컴포넌트 스캔
+애플리케이션 V3처럼 컴포넌트 스캔을 사용하는 경우 지금까지 학습한 방법으로는 프록시 적용이 불가능하다.
+왜냐하면 실제 객체를 컴포넌트 스캔으로 스프링 컨테이너에 스프링 빈으로 등록을 다 해버린 상태이기 때문이다.
+지금까지 학습한 프록시를 적용하려면, 실제 객체를 스프링 컨테이너에 빈으로 등록하는 것이 아니라
+`ProxyFactoryConfigV1` 에서 한 것 처럼, 부가 기능이 있는 프록시를 실제 객체 대신 스프링 컨테이너에 빈으로 등록해야 한다.
