@@ -357,5 +357,421 @@ public class BeanPostProcessorTest {
 > 스프링은 `CommonAnnotationBeanPostProcessor` 라는 빈 후처리기를 자동으로 등록하는데, 여기에서 
 > `@PostConstruct` 애노테이션이 붙은 메서드를 호출한다. 따라서 스프링 스스로도 스프링 내부의 기능을 확장하기 위해 빈 후처리기를 사용한다.
 
+## 빈 후처리기 - 적용
+
+![](res/img_5.png)
+
+#### PackageLogTraceProxyPostProcessor
+
+```java
+package hello.proxy.config.v4_postprocessor.postprocessor;
+
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.aop.Advisor;
+import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.config.BeanPostProcessor;
+
+@Slf4j
+public class PackageLogTracePostProcessor implements BeanPostProcessor {
+
+    private final String basePackage;
+    private final Advisor advisor;
+
+    public PackageLogTracePostProcessor(String basePackage, Advisor advisor) {
+        this.basePackage = basePackage;
+        this.advisor = advisor;
+    }
+
+    @Override
+    public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
+        log.info("param beanName={}, bean={}", beanName, bean.getClass());
+
+        //프록시 적용 대상 여부 체크
+        //프록시 적용 대상이 아니면 원본을 그대로 진행
+        String packageName = bean.getClass().getPackageName();
+        if(!packageName.startsWith(basePackage)){
+            return bean;
+        }
+
+        //프록시 대상이면 프록시를 만들어서 반환
+        ProxyFactory proxyFactory = new ProxyFactory(bean);
+        proxyFactory.addAdvisor(advisor);
+
+
+        Object proxy = proxyFactory.getProxy();
+        log.info("create proxy: target={}, proxy={}", bean.getClass(), proxy.getClass());
+        return proxy;
+    }
+}
+```
+
+* `PackageLogTraceProxyPostProcessor` 는 원본 객체를 프록시 객체로 변환하는 역할을 한다. 
+* 이때 프록시 팩토리를 사용하는데, 프록시 팩토리는 `advisor` 가 필요하기 때문에 이 부분은 외부에서 주입 받도록 했다. 
+* 모든 스프링 빈들에 프록시를 적용할 필요는 없다. 여기서는 특정 패키지와 그 하위에 위치한 스프링 빈들만 프록시를 적용한다. 
+  여기서는 `hello.proxy.app` 과 관련된 부분에만 적용하면 된다. 다른 패키지의 객체들은 원본 객체를 그대로 반환한다. 
+* 프록시 적용 대상의 반환 값을 보면 원본 객체 대신에 프록시 객체를 반환한다. 따라서 스프링 컨테이너에 원본 객체 대신에 프록시 객체가 스프링 빈으로 등록된다. 
+  원본 객체는 스프링 빈으로 등록되지 않는다.
+
+#### BeanPostProcessorConfig
+
+```java
+package hello.proxy.config.v4_postprocessor;
+
+import hello.proxy.AppV1Config;
+import hello.proxy.AppV2Config;
+import hello.proxy.config.v3_proxyfactory.advice.LogTraceAdvice;
+import hello.proxy.config.v4_postprocessor.postprocessor.PackageLogTracePostProcessor;
+import hello.proxy.trace.logtrace.LogTrace;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.aop.Advisor;
+import org.springframework.aop.support.DefaultPointcutAdvisor;
+import org.springframework.aop.support.NameMatchMethodPointcut;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+
+@Slf4j
+@Configuration
+@Import({AppV1Config.class, AppV2Config.class})
+public class BeanPostProcessorConfig {
+
+    @Bean
+    public PackageLogTracePostProcessor logTracePostProcessor(LogTrace logTrace){
+        return new PackageLogTracePostProcessor("hello.proxy.app", getAdvisor(logTrace));
+    }
+
+    private Advisor getAdvisor(LogTrace logTrace) {
+        NameMatchMethodPointcut pointcut = new NameMatchMethodPointcut();
+        pointcut.setMappedNames("request*", "order*", "save*");
+
+        LogTraceAdvice advice = new LogTraceAdvice(logTrace);
+        return new DefaultPointcutAdvisor(pointcut, advice);
+    }
+}
+```
+
+* `@Import({AppV1Config.class, AppV2Config.class})` : V3는 컴포넌트 스캔으로 자동으로 스프링 빈으로 등록되지만, V1, V2 
+  애플리케이션은 수동으로 스프링 빈으로 등록해야 동작한다. `ProxyApplication` 에서 등록해도 되지만 편의상 여기에 등록한다. 
+* `@Bean logTraceProxyPostProcessor()` : 특정 패키지를 기준으로 프록시를 생성하는 빈 후처리기를 스프링 빈으로 등록한다. 
+  빈 후처리기는 스프링 빈으로만 등록하면 자동으로 동작한다. 여기에 프록시를 적용할 패키지 정보(`hello.proxy.app`)와 
+  어드바이저(`getAdvisor(logTrace)`)를 넘겨준다. 
+* 이제 프록시를 생성하는 코드가 설정 파일에는 필요 없다. 순수한 빈 등록만 고민하면 된다. 프록시를 생성하고 프록시를 스프링 빈으로 
+  등록하는 것은 빈 후처리기가 모두 처리해준다.
+
+
+#### ProxyApplication
+
+```java
+package hello.proxy;
+
+import hello.proxy.config.v4_postprocessor.BeanPostProcessorConfig;
+import hello.proxy.trace.logtrace.LogTrace;
+import hello.proxy.trace.logtrace.ThreadLocalLogTrace;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+
+//@Import(AppV1Config.class)
+//@Import({AppV2Config.class, AppV1Config.class})
+//@Import(InterfaceProxyConfig.class)
+//@Import(ConcreteProxyConfig.class)
+//@Import(DynamicProxyBasicConfig.class)
+//@Import(DynamicProxyFilterConfig.class)
+//@Import(ProxyFactoryConfigV1.class)
+//@Import(ProxyFactoryConfigV2.class)
+@Import(BeanPostProcessorConfig.class)
+@SpringBootApplication(scanBasePackages = "hello.proxy.app") //주의
+public class ProxyApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(ProxyApplication.class, args);
+	}
+
+	@Bean
+	public LogTrace logTrace(){
+		return new ThreadLocalLogTrace();
+	}
+}
+```
+
+
+#### 프록시 적용 대상 여부 체크
+애플리케이션을 실행해서 로그를 확인해보면 알겠지만, 우리가 직접 등록한 스프링 빈들 뿐만 아니라 스프링 부트가 기본으로 등록하는 
+수 많은 빈들이 빈 후처리기에 넘어온다. 그래서 어떤 빈을 프록시로 만들 것인지 기준이 필요하다. 
+여기서는 간단히 `basePackage` 를 사용해서 특정 패키지를 기준으로 해당 패키지와 그 하위 패키지의 빈들을 프록시로 만든다.
+스프링 부트가 기본으로 제공하는 빈 중에는 프록시 객체를 만들 수 없는 빈들도 있다. 따라서 모든 객체를 프록시로 만들 경우 오류가 발생한다.
+
+
+## 빈 후처리기 - 정리
+
+
+### 문제1 - 너무 많은 설정
+프록시를 직접 스프링 빈으로 등록하는 `ProxyFactoryConfigV1` , `ProxyFactoryConfigV2` 와 같은 설정 파일은 프록시 관련 설정이 지나치게 
+많다는 문제가 있다.
+예를 들어서 애플리케이션에 스프링 빈이 100개가 있다면 여기에 프록시를 통해 부가 기능을 적용하려면 100개의 프록시 설정 코드가 들어가야 한다.
+스프링 빈을 편리하게 등록하려고 컴포넌트 스캔까지 사용하는데, 이렇게 직접 등록하는 것도 모자라서, 프록시를 적용하는 코드까지 빈 생성 코드에 넣어야 했다.
+
+### 문제2 - 컴포넌트 스캔
+애플리케이션 V3처럼 컴포넌트 스캔을 사용하는 경우 지금까지 학습한 방법으로는 프록시 적용이 불가능했다.
+왜냐하면 컴포넌트 스캔으로 이미 스프링 컨테이너에 실제 객체를 스프링 빈으로 등록을 다 해버린 상태이기 때문이다.
+좀 더 풀어서 설명하자면, 지금까지 학습한 방식으로 프록시를 적용하려면, 원본 객체를 스프링 컨테이너에 빈으로 등록하는 것이 아니라
+`ProxyFactoryConfigV1` 에서 한 것 처럼, 프록시를 원본 객체 대신 스프링 컨테이너에 빈으로 등록해야 한다. 
+그런데 컴포넌트 스캔은 원본 객체를 스프링 빈으로 자동으로 등록하기 때문에 프록시 적용이 불가능하다.
+
+
+### 문제 해결
+빈 후처리기 덕분에 프록시를 생성하는 부분을 하나로 집중할 수 있다. 그리고 컴포넌트 스캔처럼 스프링이 직접 대상을 빈으로 등록하는 경우에도
+중간에 빈 등록 과정을 가로채서 원본 대신에 프록시를 스프링 빈으로 등록할 수 있다.
+덕분에 애플리케이션에 수 많은 스프링 빈이 추가되어도 프록시와 관련된 코드는 전혀 변경하지 않아도 된다. 
+그리고 컴포넌트 스캔을 사용해도 프록시가 모두 적용된다.
+
+>  중요
+> 
+> 프록시의 적용 대상 여부를 여기서는 간단히 패키지를 기준으로 설정했다. 그런데 잘 생각해보면 포인트컷을 사용하면 더 깔끔할 것 같다.
+> 포인트컷은 이미 클래스, 메서드 단위의 필터 기능을 가지고 있기 때문에, 프록시 적용 대상 여부를 정밀하게 설정할 수 있다.
+> 참고로 어드바이저는 포인트컷을 가지고 있다. 따라서 어드바이저를 통해 포인트컷을 확인할 수 있다.
+> 스프링 AOP는 포인트컷을 사용해서 프록시 적용 대상 여부를 체크한다.
+> 결과적으로 포인트컷은 다음 두 곳에 사용된다.
+> 
+> 1. 프록시 적용 대상 여부를 체크해서 꼭 필요한 곳에만 프록시를 적용한다. (빈 후처리기 - 자동 프록시 생성)
+> 2. 프록시의 어떤 메서드가 호출 되었을 때 어드바이스를 적용할 지 판단한다. (프록시 내부)
+
+## 스프링이 제공하는 빈 후처리기1
+
+#### build.gradle - 추가
+
+```groovy
+implementation 'org.springframework.boot:spring-boot-starter-aop'
+```
+
+이 라이브러리를 추가하면 `aspectjweaver` 라는 `aspectJ` 관련 라이브러리를 등록하고, 
+스프링 부트가 AOP 관련 클래스를 자동으로 스프링 빈에 등록한다. 스프링 부트가 없던 시절에는 
+`@EnableAspectJAutoProxy` 를 직접 사용해야 했는데, 이 부분을 스프링 부트가 자동으로 처리해준다.
+`aspectJ` 는 뒤에서 설명한다. 스프링 부트가 활성화하는 빈은 `AopAutoConfiguration` 를 참고하면 된다.
+
+#### AopAutoConfiguration
+
+```java
+/*
+ * Copyright 2012-2021 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.springframework.boot.autoconfigure.aop;
+
+import org.aspectj.weaver.Advice;
+
+import org.springframework.aop.config.AopConfigUtils;
+import org.springframework.beans.factory.config.BeanFactoryPostProcessor;
+import org.springframework.beans.factory.support.BeanDefinitionRegistry;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.EnableAspectJAutoProxy;
+
+/**
+ * {@link org.springframework.boot.autoconfigure.EnableAutoConfiguration
+ * Auto-configuration} for Spring's AOP support. Equivalent to enabling
+ * {@link EnableAspectJAutoProxy @EnableAspectJAutoProxy} in your configuration.
+ * <p>
+ * The configuration will not be activated if {@literal spring.aop.auto=false}. The
+ * {@literal proxyTargetClass} attribute will be {@literal true}, by default, but can be
+ * overridden by specifying {@literal spring.aop.proxy-target-class=false}.
+ *
+ * @author Dave Syer
+ * @author Josh Long
+ * @since 1.0.0
+ * @see EnableAspectJAutoProxy
+ */
+@Configuration(proxyBeanMethods = false)
+@ConditionalOnProperty(prefix = "spring.aop", name = "auto", havingValue = "true", matchIfMissing = true)
+public class AopAutoConfiguration {
+
+	@Configuration(proxyBeanMethods = false)
+	@ConditionalOnClass(Advice.class)
+	static class AspectJAutoProxyingConfiguration {
+
+		@Configuration(proxyBeanMethods = false)
+		@EnableAspectJAutoProxy(proxyTargetClass = false)
+		@ConditionalOnProperty(prefix = "spring.aop", name = "proxy-target-class", havingValue = "false")
+		static class JdkDynamicAutoProxyConfiguration {
+
+		}
+
+		@Configuration(proxyBeanMethods = false)
+		@EnableAspectJAutoProxy(proxyTargetClass = true)
+		@ConditionalOnProperty(prefix = "spring.aop", name = "proxy-target-class", havingValue = "true",
+				matchIfMissing = true)
+		static class CglibAutoProxyConfiguration {
+
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	@ConditionalOnMissingClass("org.aspectj.weaver.Advice")
+	@ConditionalOnProperty(prefix = "spring.aop", name = "proxy-target-class", havingValue = "true",
+			matchIfMissing = true)
+	static class ClassProxyingConfiguration {
+
+		@Bean
+		static BeanFactoryPostProcessor forceAutoProxyCreatorToUseClassProxying() {
+			return (beanFactory) -> {
+				if (beanFactory instanceof BeanDefinitionRegistry) {
+					BeanDefinitionRegistry registry = (BeanDefinitionRegistry) beanFactory;
+					AopConfigUtils.registerAutoProxyCreatorIfNecessary(registry);
+					AopConfigUtils.forceAutoProxyCreatorToUseClassProxying(registry);
+				}
+			};
+		}
+
+	}
+
+}
+```
+
+#### 자동 프록시 생성기 - AutoProxyCreator
+
+* 스프링 부트 자동 설정으로 `AnnotationAwareAspectJAutoProxyCreator` 라는 빈 후처리기가 스프링 빈에 자동으로 등록된다. 
+* 자동으로 프록시를 생성해주는 빈 후처리기이다. 
+* 이 빈 후처리기는 스프링 빈으로 등록된 Advisor 들을 자동으로 찾아서 프록시가 필요한 곳에 자동으로 프록시를 적용해준다. 
+* `Advisor` 안에는 `Pointcut` 과 `Advice` 가 이미 모두 포함되어 있다. 따라서 `Advisor` 만 알고 있으면 
+  그 안에있는 `Pointcut`으로 어떤 스프링빈에 프록시를 적용해야 할지 알 수 있다.그리고 `Advice`로 부가 기능을 적용하면 된다.
+
+> 참고
+> 
+> `AnnotationAwareAspectJAutoProxyCreator` 는 `@AspectJ`와 관련된 AOP 기능도 자동으로 찾아서 처리해준다.
+> Advisor 는 물론이고, `@Aspect` 도 자동으로 인식해서 프록시를 만들고 AOP를 적용해준다. 
+
+#### 자동 프록시 생성기의 작동 과정
+
+![](res/img_6.png)
+
+1. 생성: 스프링이 스프링 빈 대상이 되는 객체를 생성한다. (`@Bean` , 컴포넌트 스캔 모두 포함)
+2. 전달: 생성된 객체를 빈 저장소에 등록하기 직전에 빈 후처리기에 전달한다.
+3. 모든 `Advisor` 빈 조회: 자동 프록시 생성기 - 빈 후처리기는 스프링 컨테이너에서 모든 `Advisor` 를 조회한다.
+4. 프록시 적용 대상 체크: 앞서 조회한 `Advisor` 에 포함되어 있는 포인트컷을 사용해서 해당 객체가 프록시를 적용할 대상인지 아닌지 판단한다. 
+   이때 객체의 클래스 정보는 물론이고, 해당 객체의 모든 메서드를 포인트컷에 하나하나 모두 매칭해본다. 
+   그래서 조건이 하나라도 만족하면 프록시 적용 대상이 된다. 
+   예를 들어서 10개의 메서드 중에 하나만 포인트컷 조건에 만족해도 프록시 적용 대상이 된다.
+5. 프록시 생성: 프록시 적용 대상이면 프록시를 생성하고 반환해서 프록시를 스프링 빈으로 등록한다. 
+   만약 프록시 적용 대상이 아니라면 원본 객체를 반환해서 원본 객체를 스프링 빈으로 등록한다.
+6. 빈 등록: 반환된 객체는 스프링 빈으로 등록된다.
+
+#### 생성된 프록시
+
+![](res/img_7.png)
+
+프록시는 내부에 어드바이저와 실제 호출해야할 대상 객체(`target`)을 알고 있다.
+
+
+#### AutoProxyConfig
+
+```java
+package hello.proxy.config.v5_autoproxy;
+
+import hello.proxy.AppV1Config;
+import hello.proxy.AppV2Config;
+import hello.proxy.config.v3_proxyfactory.advice.LogTraceAdvice;
+import hello.proxy.trace.logtrace.LogTrace;
+import org.springframework.aop.Advisor;
+import org.springframework.aop.support.DefaultPointcutAdvisor;
+import org.springframework.aop.support.NameMatchMethodPointcut;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+
+@Configuration
+@Import({AppV1Config.class, AppV2Config.class})
+public class AutoProxyConfig {
+
+    @Bean
+    public Advisor advisor(LogTrace logTrace){
+        NameMatchMethodPointcut pointcut = new NameMatchMethodPointcut();
+        pointcut.setMappedNames("request*", "order*", "save*");
+
+        LogTraceAdvice advice = new LogTraceAdvice(logTrace);
+        return new DefaultPointcutAdvisor(pointcut, advice);
+    }
+
+}
+```
+
+* `AutoProxyConfig` 코드를 보면 `advisor1` 이라는 어드바이저 하나만 등록했다. 
+* 빈 후처리기는 이제 등록하지 않아도 된다. 스프링은 자동 프록시 생성기라는
+  (`AnnotationAwareAspectJAutoProxyCreator`) 빈 후처리기를 자동으로 등록해준다.
+
+
+```java
+package hello.proxy;
+
+import hello.proxy.config.v5_autoproxy.AutoProxyConfig;
+import hello.proxy.trace.logtrace.LogTrace;
+import hello.proxy.trace.logtrace.ThreadLocalLogTrace;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+
+//@Import(AppV1Config.class)
+//@Import({AppV2Config.class, AppV1Config.class})
+//@Import(InterfaceProxyConfig.class)
+//@Import(ConcreteProxyConfig.class)
+//@Import(DynamicProxyBasicConfig.class)
+//@Import(DynamicProxyFilterConfig.class)
+//@Import(ProxyFactoryConfigV1.class)
+//@Import(ProxyFactoryConfigV2.class)
+//@Import(BeanPostProcessorConfig.class)
+@Import(AutoProxyConfig.class)
+@SpringBootApplication(scanBasePackages = "hello.proxy.app") //주의
+public class ProxyApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(ProxyApplication.class, args);
+	}
+
+	@Bean
+	public LogTrace logTrace(){
+		return new ThreadLocalLogTrace();
+	}
+}
+```
+
+> 중요
+> 
+> 포인트컷은 2가지에 사용된다.
+
+
+1. 프록시 적용 여부 판단 - 생성 단계
+   * 자동 프록시 생성기는 포인트컷을 사용해서 해당 빈이 프록시를 생성할 필요가 있는지 없는지 체크한다. 
+   * 클래스 + 메서드 조건을 모두 비교한다. 이때 모든 메서드를 체크하는데, 포인트컷 조건에 하나하나 매칭해본다. 
+     만약 조건에 맞는 것이 하나라도 있으면 프록시를 생성한다.
+     * 예) `orderControllerV1` 은 `request()` , `noLog()` 가 있다. 여기에서 `request()` 가 조건에 만족하므로 
+       프록시를 생성한다.
+     * 만약 조건에 맞는 것이 하나도 없으면 프록시를 생성할 필요가 없으므로 프록시를 생성하지 않는다.
+
+2. 어드바이스 적용 여부 판단 - 사용 단계
+   * 프록시가 호출되었을 때 부가 기능인 어드바이스를 적용할지 말지 포인트컷을 보고 판단한다. 
+   * 앞서 설명한 예에서 `orderControllerV1` 은 이미 프록시가 걸려있다. 
+   * `orderControllerV1` 의 `request()` 는 현재 포인트컷 조건에 만족하므로 프록시는 어드바이스를 먼저 호출하고, 
+     `target` 을 호출한다. 
+   * `orderControllerV1` 의 `noLog()` 는 현재 포인트컷 조건에 만족하지 않으므로 어드바이스를 호출하지 않고 
+     바로 `target` 만 호출한다.
+
 
 
