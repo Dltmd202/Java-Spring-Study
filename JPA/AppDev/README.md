@@ -1,4 +1,4 @@
-# Hello JPA - 애플리케이션 개발
+# Hello JPA
 
 ## JPA 구동 방식
 ![](./res/1.png)

@@ -1,20 +1,5 @@
 ## Hello JPA - 프로젝트 생성
 
-### H2 데이터베이스 설치와 실행
-
-* http://www.h2database.com/
-* 실습용 DB
-* 가벼움 (1.5MB)
-* 웹용 쿼리툴 제공
-* MySQL, Oracle 데이터베이스 시뮬레이션 기능
-* 시퀸스, AUTO INCREMENT 기능 지원
-
-### 프로젝트 생성
-* **자바 8 이상**
-* 메이븐 설정
-  * **groupdId**: jpa-basic
-  * **artifactOd**: ex1-hello-jpa
-  * **version**: 1.0.0
 
 * 라이브러리 추가 - `pom.xml`
     ```xml
