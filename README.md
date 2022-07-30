@@ -1,4 +1,7 @@
-# TIL
+# Notes 
+
+![java](https://img.shields.io/badge/java-11-orange.svg)
+![java](https://img.shields.io/badge/mysql-8.0.28-blue.svg)
 
 ## Network
 
