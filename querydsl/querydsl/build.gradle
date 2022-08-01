@@ -37,6 +37,7 @@ dependencies {
     implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:2.2.0'
     //JPA, 스프링 데이터 JPA 추가
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'com.github.gavlyukovskiy:p6spy-spring-boot-starter:1.5.8'
 
     //Querydsl 추가
     implementation "com.querydsl:querydsl-jpa:${queryDslVersion}"
