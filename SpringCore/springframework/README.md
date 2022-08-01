@@ -3,7 +3,7 @@
 
 * [SpringFramework](#Spring-framework)
 * [객체 지향](#객체-지향)
-* [좋은 객체 지향 설계의 5가지 원칙 (SOLID)](#-좋은-객체-지향-설계의-5가지-원칙-(SOLID))
+* [좋은 객체 지향 설계의 5가지 원칙 (SOLID)](#좋은-객체-지향-설계의-5가지-원칙-(SOLID))
 
 ## Spring framework
 * 핵심 기술: 스프링 DI 컨테이너, AOP, 이벤트, 기타
