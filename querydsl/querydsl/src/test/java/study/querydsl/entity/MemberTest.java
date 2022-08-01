@@ -3,11 +3,15 @@ package study.querydsl.entity;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.Commit;
 
 import javax.persistence.EntityManager;
+import javax.transaction.Transactional;
 import java.util.List;
 
 @SpringBootTest
+@Transactional
+@Commit
 class MemberTest {
 
     @Autowired
@@ -17,6 +21,9 @@ class MemberTest {
     public void testEntity() {
         Team teamA = new Team("teamA");
         Team teamB = new Team("teamB");
+
+        em.persist(teamA);
+        em.persist(teamB);
 
         Member member1 = new Member("member1", 10, teamA);
         Member member2 = new Member("member2", 20, teamA);
