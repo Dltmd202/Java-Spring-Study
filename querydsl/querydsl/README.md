@@ -777,3 +777,337 @@ void theta_join() {
 * 외부 조인 불가능 -> 다음에 설명할 조인 on 을 사용하면 외부 조인 가능
 
 
+## 조인 - on절
+
+* ON절을 활용한 조인(JPA 2.1부터 지원) 
+1. 조인 대상 필터링
+2. 연관관계 없는 엔티티 외부조인
+
+### 1. 조인 대상 필터링
+
+예) 회원과 팀을 조인하면서, 팀 이름이 teamA인 팀만 조인, 회원은 모두 조회
+
+```java
+/**
+ * 예) 회원과 팀을 조인하면서, 팀 이름이 teamA인 팀만 조인, 회원은 모두 조인
+ * JPQL: SELECT m, t FROM Member m LEFT JOIN m.team on t.name = 'teamA'
+ * SQL: SELECT m.*, t.* FROM Member m LEFT JOIN Team t on m.TEAM_ID=t.id and t.name='teamA'
+ */
+@Test
+void join_on_filtering() {
+    List<Tuple> result = queryFactory
+            .select(member, team)
+            .from(member)
+            .leftJoin(member.team, team).on(team.name.eq("teamA"))
+            .fetch();
+
+    for (Tuple tuple : result) {
+        System.out.println("tuple = " + tuple);
+    }
+}
+```
+
+* 연관관계가 잡혀있기 때문에 `member.team`과 `team`을 `leftJoin()`절에 명시해 주었다.
+
+
+> 참고: on 절을 활용해 조인 대상을 필터링 할 때, 
+> 
+> 외부조인이 아니라 내부조인(inner join)을 사용하면, where 절에서 필터링 하는 것과 기능이 동일하다. 
+> 따라서 on 절을 활용한 조인 대상 필터링을 사용할 때, 내부조인 이면 익숙한 where 절로 해결하고, 
+> 정말 외부조인이 필요한 경우에만 이 기능을 사용하는 것이 좋다.
+
+
+### 2. 연관관계 없는 엔티티 외부 조인
+
+예) 회원의 이름과 팀의 이름이 같은 대상 외부 조인
+
+```java
+/**
+ * 2. 연관관계가 없는 엔티티 외부 조인
+ * 예) 회원의 이름과 팀의 이름이 같은 대상 외부 조인
+ * JPQL: SELECT m, t FROM Member m LEFT JOIN Team t on m.username = t.name
+ * SQL: SELECT m.*, t.* FROM Member m LEFT JOIN Team t on m.username = t.name
+ */
+@Test
+void join_on_no_relation() {
+    em.persist(new Member("teamA"));
+    em.persist(new Member("teamB"));
+    em.persist(new Member("teamC"));
+
+    List<Tuple> result = queryFactory
+            .select(member, team)
+            .from(member)
+            .leftJoin(team).on(member.username.eq(team.name))
+            .fetch();
+
+    for (Tuple tuple : result) {
+        System.out.println("tuple = " + tuple);
+    }
+}
+```
+
+* 연관관계가 안잡혀 있기 때문에 연관 필드가 명시되지 않고 `leftJoin()` 절에 바로 `team`을 명시하였다.
+
+
+* 하이버네이트 5.1부터 on 을 사용해서 서로 관계가 없는 필드로 외부 조인하는 기능이 추가되었다. 물론 내부 조인도 가능하다.
+
+
+> 주의
+> 
+> `on()`을 사용할 땐 `leftJoin()` 부분에 일반 조인과 다르게 엔티티 하나만 들어간다.
+>
+> 일반조인: leftJoin(member.team, team)
+> 
+> on조인: from(member).leftJoin(team).on(xxx)
+
+
+## 조인 - 패치 조인
+
+#### 페치 조인 미적용
+
+```java
+@Test
+void fetchJoinNo() {
+    em.flush();
+    em.clear();
+
+    Member findMember = queryFactory
+            .selectFrom(member)
+            .where(member.username.eq("member1"))
+            .fetchOne();
+
+    boolean loaded = emf.getPersistenceUnitUtil().isLoaded(findMember.getTeam());
+
+    assertThat(loaded).as("패치 조인 미적용").isFalse();
+}
+```
+
+#### 페치 조인 적용
+
+```java
+@Test
+void fetchJoin() {
+    em.flush();
+    em.clear();
+
+    Member findMember = queryFactory
+            .selectFrom(member)
+            .join(member.team, team).fetchJoin()
+            .where(member.username.eq("member1"))
+            .fetchOne();
+
+    boolean loaded = emf.getPersistenceUnitUtil().isLoaded(findMember.getTeam());
+
+    assertThat(loaded).as("패치 조인 적용").isTrue();
+}
+```
+
+#### 사용방법
+* `join(), leftJoin()` 등 조인 기능 뒤에 `fetchJoin()` 이라고 추가하면 된다.
+
+
+## 서브 쿼리
+
+`com.querydsl.jpa.JPAExpressions` 사용
+
+#### 서브 쿼리 eq 사용
+
+```java
+/**
+ * 나이가 가장 많은 회원
+ */
+@Test
+void subQuery() {
+    QMember memberSub = new QMember("memberSub");
+
+    List<Member> result = queryFactory
+            .selectFrom(member)
+            .where(member.age.eq(
+                    JPAExpressions
+                            .select(memberSub.age.max())
+                            .from(memberSub)
+            ))
+            .fetch();
+
+    assertThat(result).extracting("age")
+            .containsExactly(40);
+}
+```
+
+#### 서브 쿼리 goe 사용
+
+```java
+/**
+ * 나이가 평균 이상인 회원
+ * @throws Exception
+ */
+@Test
+void subQueryGoe() throws Exception{
+    QMember memberSub = new QMember("memberSub");
+
+    List<Member> result = queryFactory
+            .selectFrom(member)
+            .where(member.age.goe(
+                    JPAExpressions
+                            .select(memberSub.age.avg())
+                            .from(memberSub)
+            ))
+            .fetch();
+
+    assertThat(result).extracting("age")
+            .containsExactly(30, 40);
+}
+```
+
+#### 서브쿼리 여러 건 처리 in 사용
+
+```java
+@Test
+void subQueryIn() {
+    QMember memberSub = new QMember("memberSub");
+
+    List<Member> result = queryFactory
+            .selectFrom(member)
+            .where(member.age.in(
+                    JPAExpressions
+                            .select(memberSub.age)
+                            .from(memberSub)
+                            .where(memberSub.age.gt(10))
+            ))
+            .fetch();
+
+    assertThat(result).extracting("age")
+            .containsExactly(20, 30, 40);
+}
+```
+
+#### select 절에 subquery
+
+```java
+@Test
+void selectSubquery() {
+        QMember memberSub = new QMember("memberSub");
+
+        List<Tuple> result = queryFactory
+          .select(member.username,
+          select(memberSub.age.avg())
+          .from(memberSub)
+          ).from(member)
+          .fetch();
+    }
+```
+
+### from 절의 서브쿼리 한계
+JPA JPQL 서브쿼리의 한계점으로 from 절의 서브쿼리(인라인 뷰)는 지원하지 않는다. 
+당연히 Querydsl 도 지원하지 않는다. 하이버네이트 구현체를 사용하면 select 절의 서브쿼리는 지원한다. 
+Querydsl도 하이버네이트 구현체를 사용하면 select 절의 서브쿼리를 지원한다.
+
+### from 절의 서브쿼리 해결방안
+1. 서브쿼리를 join으로 변경한다. (가능한 상황도 있고, 불가능한 상황도 있다.)
+2. 애플리케이션에서 쿼리를 2번 분리해서 실행한다.
+3. nativeSQL을 사용한다.
+
+
+## Case 문
+
+select, 조건절(where), order by에서 사용 가능
+
+#### 단순한 조건
+
+```java
+@Test
+void basicCase() {
+    List<String> result = queryFactory
+            .select(member.age
+                    .when(10).then("영살")
+                    .when(20).then("스무살")
+                    .otherwise("기타")
+            ).from(member)
+            .fetch();
+
+    for (String s : result) {
+        System.out.println(s);
+    }
+}
+```
+
+#### 복잡한 조건
+
+```java
+@Test
+void complexCase() {
+    List<String> result = queryFactory
+            .select(new CaseBuilder()
+                    .when(member.age.between(0, 20)).then("0~20살")
+                    .when(member.age.between(21, 30)).then("21~30살")
+                    .otherwise("기타")
+            ).from(member)
+            .fetch();
+
+    for (String s : result) {
+        System.out.println(s);
+    }
+}
+```
+
+#### orderBy에서 Case 문 함께 사용하기 예제
+
+1. 0 ~ 30살이 아닌 회원을 가장 먼저 출력
+2. 0 ~ 20살 회원 출력
+3. 21 ~ 30살 회원 출력
+
+```java
+@Test
+void orderByCase() {
+    NumberExpression<Integer> rankPath = new CaseBuilder()
+            .when(member.age.between(0, 20)).then(1)
+            .when(member.age.between(21, 30)).then(2)
+            .otherwise(3);
+
+    List<Tuple> result = queryFactory
+            .select(member.username, member.age, rankPath)
+            .from(member)
+            .orderBy(rankPath.desc())
+            .fetch();
+}
+```
+
+## 상수, 문자 더하기
+
+상수가 필요하면 `Expressions.constant(xxx)` 사용
+
+```java
+@Test
+void constant() {
+    Tuple result = queryFactory
+            .select(member.username, Expressions.constant("A"))
+            .from(member)
+            .fetchFirst();
+}
+```
+
+> 참고
+> 
+> 위와 같이 최적화가 가능하면 SQL에 constant 값을 넘기지 않는다. 
+> 상수를 더하는 것 처럼 최적화가 어려우면 SQL에 constant 값을 넘긴다.
+
+#### 문자 더하기 concat
+
+```java
+@Test
+void concat() {
+    List<String> result = queryFactory
+            .select(member.username.concat("_").concat(member.age.stringValue()))
+            .from(member)
+            .where(member.username.eq("member1"))
+            .fetch();
+}
+```
+
+* 결과: member1_10
+
+> 참고
+> 
+> `member.age.stringValue()` 부분이 중요한데, 문자가 아닌 다른 타입들은 `stringValue()` 로 
+> 문자로 변환할 수 있다. 이 방법은 ENUM을 처리할 때도 자주 사용한다.
+
