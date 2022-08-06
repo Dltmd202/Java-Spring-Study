@@ -22,7 +22,7 @@ spring:
       default-filters:
         - name: GlobalFilter
           args:
-            baseMessage: Spring Clooud Gateway Global Filter
+            baseMessage: Spring Cloud Gateway Global Filter
             preLogger: true
             postLogger: true
       routes:
