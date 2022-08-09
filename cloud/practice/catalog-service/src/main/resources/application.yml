@@ -13,13 +13,16 @@ spring:
       path: /h2-console
   jpa:
     hibernate:
-      ddl-auto: create
+      ddl-auto: none
     show-sql: true
     generate-ddl: true
     defer-datasource-initialization: true
   datasource:
-    driver-class-name: org.h2.Driver
-    url:  jdbc:h2:mem:test
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url:  jdbc:mysql://localhost:3306/msatest
+    hikari:
+      username: root
+      password: 1234
 
 eureka:
   instance:
