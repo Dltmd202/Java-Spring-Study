@@ -23,7 +23,9 @@ spring:
     hikari:
       username: root
       password: 1234
-
+  kafka:
+    consumer:
+      group-id: consumerGroupId
 eureka:
   instance:
     instance-id: ${spring.cloud.client.hostname}:${spring.application.instance_id:${random.value}}
