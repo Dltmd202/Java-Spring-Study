@@ -1,5 +1,6 @@
 package com.example.servlet3.basic.request;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StreamUtils;
 
 import javax.servlet.ServletException;
@@ -11,6 +12,7 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
+@Slf4j
 @WebServlet(name = "requestBodyStringServlet", urlPatterns = "/request-body-string")
 public class RequestBodyStringServlet extends HttpServlet {
 
@@ -19,7 +21,7 @@ public class RequestBodyStringServlet extends HttpServlet {
         ServletInputStream inputStream = request.getInputStream();
         String messageBody = StreamUtils.copyToString(inputStream, StandardCharsets.UTF_8);
 
-        System.out.println("messageBody = " + messageBody);
+        log.info("messageBody = " + messageBody);
 
         response.getWriter().write("ok");
     }

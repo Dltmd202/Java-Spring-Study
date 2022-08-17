@@ -1,14 +1,15 @@
 package com.example.servlet3.basic.request;
 
+import lombok.extern.slf4j.Slf4j;
+
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
-import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.util.Enumeration;
 
+@Slf4j
 @WebServlet(name="requestHeaderServlet", urlPatterns = "/request-header")
 public class RequestHeaderServlet extends HttpServlet {
     @Override
@@ -17,27 +18,25 @@ public class RequestHeaderServlet extends HttpServlet {
         printHeaders(request);
         printHeaderUtils(request);
         printEtc(request);
+
+        resp.getWriter().write("ok");
     }
 
     private void printStartLine(HttpServletRequest request) {
-        System.out.println("--- REQUEST-LINE - start ---");
-        System.out.println("request.getMethod() = " + request.getMethod()); //GET
-        System.out.println("request.getProtocal() = " + request.getProtocol()); //HTTP/1.1
-        System.out.println("request.getScheme() = " + request.getScheme()); //http
-        // http://localhost:8080/request-header
-        System.out.println("request.getRequestURL() = " + request.getRequestURL());
-        // /request-test
-        System.out.println("request.getRequestURI() = " + request.getRequestURI());
-        //username=hi
-        System.out.println("request.getQueryString() = " +
-                request.getQueryString());
-        System.out.println("request.isSecure() = " + request.isSecure()); //https 사용 유무
-        System.out.println("--- REQUEST-LINE - end ---");
-        System.out.println();
+        log.info("--- REQUEST-LINE - start ---");
+        log.info("request.getMethod() = {}", request.getMethod()); //GET
+        log.info("request.getProtocol = {}", request.getProtocol()); //HTTP/1.1
+        log.info("request.getScheme() = {}", request.getScheme()); //http
+        log.info("request.getRequestURL() = {}", request.getRequestURL()); // http://localhost:8080/request-header
+        log.info("request.getRequestURI() = {}", request.getRequestURI()); // /request-test
+        log.info("request.getQueryString() = {}", request.getQueryString()); //username=hi
+        log.info("request.isSecure() = {}", request.isSecure()); //https 사용 유무
+        log.info("--- REQUEST-LINE - end ---");
     }
+
     //Header 모든 정보
     private void printHeaders(HttpServletRequest request) {
-        System.out.println("--- Headers - start ---");
+        log.info("--- Headers - start ---");
 
 //        Enumeration<String> headerNames = request.getHeaderNames();
 //        while(headerNames.hasMoreElements()){
@@ -46,63 +45,37 @@ public class RequestHeaderServlet extends HttpServlet {
 //        }
 
         request.getHeaderNames().asIterator()
-                .forEachRemaining(headerName -> System.out.println(headerName + ":" + request.getHeader(headerName)));
-        System.out.println("--- Headers - end ---");
-        System.out.println();
+                        .forEachRemaining(headerName -> log.info(headerName + ": " + request.getHeader(headerName)));
+        log.info("--- Headers - end ---");
     }
 
     //Header 편리한 조회
     private void printHeaderUtils(HttpServletRequest request) {
-        System.out.println("--- Header 편의 조회 start ---");
-        System.out.println("[Host 편의 조회]");
-        System.out.println("request.getServerName() = " +
-                request.getServerName()); //Host 헤더
-        System.out.println("request.getServerPort() = " +
-                request.getServerPort()); //Host 헤더
-        System.out.println();
-        System.out.println("[Accept-Language 편의 조회]");
-        request.getLocales().asIterator()
-                .forEachRemaining(locale -> System.out.println("locale = " +
-                        locale));
-        System.out.println("request.getLocale() = " + request.getLocale());
-        System.out.println();
-        System.out.println("[cookie 편의 조회]");
-        if (request.getCookies() != null) {
-            for (Cookie cookie : request.getCookies()) {
-                System.out.println(cookie.getName() + ": " + cookie.getValue());
-            }
-        }
-        System.out.println();
-        System.out.println("[Content 편의 조회]");
-        System.out.println("request.getContentType() = " +
-                request.getContentType());
-        System.out.println("request.getContentLength() = " +
-                request.getContentLength());
-        System.out.println("request.getCharacterEncoding() = " +
-                request.getCharacterEncoding());
-        System.out.println("--- Header 편의 조회 end ---");
-        System.out.println();
+        log.info("--- Header 편의 조회 start ---");
+        log.info("[Host 편의 조회]");
+        log.info("request.getServerName() = " + request.getServerName()); //Host 헤더
+        log.info("request.getServerPort() = " + request.getServerPort()); //Host 헤더
+        log.info("[Accept-Language 편의 조회]");
+        log.info("request.getLocale() = " + request.getLocale());
+        log.info("[cookie 편의 조회]");
+        log.info("[Content 편의 조회]");
+        log.info("request.getContentType() = " + request.getContentType());
+        log.info("request.getContentLength() = " + request.getContentLength());
+        log.info("request.getCharacterEncoding() = " + request.getCharacterEncoding());
+        log.info("--- Header 편의 조회 end ---");
     }
 
     //기타 정보
     private void printEtc(HttpServletRequest request) {
-        System.out.println("--- 기타 조회 start ---");
-        System.out.println("[Remote 정보]");
-        System.out.println("request.getRemoteHost() = " +
-                request.getRemoteHost()); //
-        System.out.println("request.getRemoteAddr() = " +
-                request.getRemoteAddr()); //
-        System.out.println("request.getRemotePort() = " +
-                request.getRemotePort()); //
-        System.out.println();
-        System.out.println("[Local 정보]");
-        System.out.println("request.getLocalName() = " +
-                request.getLocalName()); //
-        System.out.println("request.getLocalAddr() = " +
-                request.getLocalAddr()); //
-        System.out.println("request.getLocalPort() = " +
-                request.getLocalPort()); //
-        System.out.println("--- 기타 조회 end ---");
-        System.out.println();
+        log.info("--- 기타 조회 start ---");
+        log.info("[Remote 정보]");
+        log.info("request.getRemoteHost() = " + request.getRemoteHost());
+        log.info("request.getRemoteAddr() = " + request.getRemoteAddr());
+        log.info("request.getRemotePort() = " + request.getRemotePort());
+        log.info("[Local 정보]");
+        log.info("request.getLocalName() = " + request.getLocalName());
+        log.info("request.getLocalAddr() = " + request.getLocalAddr());
+        log.info("request.getLocalPort() = " + request.getLocalPort());
+        log.info("--- 기타 조회 end ---");
     }
 }
