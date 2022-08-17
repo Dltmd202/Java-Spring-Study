@@ -639,7 +639,7 @@ HTTP 응답 메시지는 주로 다음 내용을 담아서 전달한다.
 
 ### HttpServletResponse - HTML 응답
 
-#### ResponseHtmlServlet
+#### [ResponseHtmlServlet](./src/main/java/com/example/servlet3/basic/response/ResponseHtmlServlet.java)
 
 ```java
 package com.example.servlet3.basic.response;
@@ -675,7 +675,7 @@ HTTP 응답으로 HTML을 반환할 때는 content-type을 `text/html` 로 지�
 
 ## HTTP 응답 데이터 - API JSON
 
-#### ResponseJsonServlet
+#### [ResponseJsonServlet](./src/main/java/com/example/servlet3/basic/response/ResponseJsonServlet.java)
 
 ```java
 package com.example.servlet3.basic.response;
