@@ -149,3 +149,255 @@ public class OrderServiceImpl implements OrderService {
 
 이 문제를 해결하려면 누군가가 클라이언트인 `OrderServiceImpl` 에 `DiscountPolicy` 의
 구현 객체를 대신 생성하고 주입해주어야 한다.
+
+
+## 관심사의 분리
+
+### AppConfig
+
+* 애플리케이션의 전체 동작 방식을 구성(config) 하기 위해, 구현 객체를 생성하고, 연결하는 책임을 가지는 별도의 설정 클래스
+
+#### AppConfig
+
+```java
+package hello.core;
+
+import hello.core.discount.FixDiscountPolicy;
+import hello.core.member.MemberService;
+import hello.core.member.MemberServiceImpl;
+import hello.core.member.MemoryMemberRepository;
+import hello.core.order.OrderService;
+import hello.core.order.OrderServiceImpl;
+
+public class AppConfig {
+
+    public MemberService memberService(){
+        return new MemberServiceImpl(new MemoryMemberRepository());
+    }
+    
+    public OrderService orderService(){
+        return new OrderServiceImpl(
+                new MemoryMemberRepository(),
+                new FixDiscountPolicy());
+    }
+}
+```
+
+* AppConfig는 애플리케이션의 실제 동작에 필요한 구현 객체를 생성한다.
+  * `MemberServiceImpl` 
+  * `MemoryMemberRepository`
+  * `OrderServiceImpl`
+  * `FixDiscountPolicy`
+
+* AppConfig는 생성한 객체 인스턴스의 참조를 생성자를 통해서 주입해준다.
+  * `MemberServiceImpl` -> `MemoryMemberRepository`
+  * `OrderServiceImpl` -> `MemoryMemberRepository`, `FixDiscountPolicy` 
+
+#### MemberServiceImpl - 생성자 주입
+
+```java
+package hello.core.member;
+
+public class MemberServiceImpl implements MemberService{
+
+    private final MemberRepository memberRepository;
+
+    public MemberServiceImpl(MemberRepository memberRepository) {
+        this.memberRepository = memberRepository;
+    }
+
+    @Override
+    public void join(Member member) {
+        memberRepository.save(member);
+    }
+
+    @Override
+    public Member findMember(Long memberId) {
+        return memberRepository.findById(memberId);
+    }
+
+}
+```
+
+* 설계 변경으로 `MemberServiceImpl`은 `MemoryMemberRepository`를 의존하지 않는다
+* 단지 `MemberRepository` 인터페이스만 의존한다.
+* `MemberServiceImpl`입장에서 생성자를 통해 어떤 구현 객체가 들어올지는 알 수 없다.
+* `MemberSerivceImpl`의 생성자를 통해서 어떤 구현 객체를 주입할지는 오직 외부(`AppConfig`)에서 결정된다.
+* `MemberServiceImpl`은 이제부터 의존관계에 대한 고민은 외부에 맡기고 실행에만 집중하면 된다.
+
+#### 클래스 다이어그램
+
+![](res/img_5.png)
+
+
+* 객체의 생성과 연결은 `AppConfig`가 담당한다.
+* DIP 완성: `MemberServiceImpl`은 `MemberRepository`은 추상에만 의존한다. 이제 구체 클래스를 몰라도 된다.
+* 관심사의 분리: 객체를 생성하고 연결하는 역할과 실행하는 역할이 명확히 분리되었다.
+
+#### 회원 객체 인스턴스 다이어그램 
+
+![](res/img_6.png)
+
+* `appConfig` 객체는 `memoryMemberRepository` 객체를 생성하고 그 참조값을 `memberServiceImpl`을 생성하면서 생성자로 전달한다.
+* 클라이언트인 `memberServiceImpl` 입장에서 보면 의존관계를 마치 외부에서 주입해주는 것 같다고 해서 DI(Dependency Injection)
+  우리말로 의존관계 주입 또는 의존성 주입이라 한다.
+
+#### OrderServiceImpl - 생성자 주입
+
+```java
+package hello.core.order;
+
+import hello.core.discount.DiscountPolicy;
+import hello.core.discount.FixDiscountPolicy;
+import hello.core.member.Member;
+import hello.core.member.MemberRepository;
+import hello.core.member.MemoryMemberRepository;
+
+public class OrderServiceImpl implements OrderService{
+
+    private final MemberRepository memberRepository;
+    private final DiscountPolicy discountPolicy;
+
+    public OrderServiceImpl(MemberRepository memberRepository, DiscountPolicy discountPolicy) {
+        this.memberRepository = memberRepository;
+        this.discountPolicy = discountPolicy;
+    }
+
+    @Override
+    public Order createOrder(Long memberId, String itemName, int itemPrice) {
+        Member member = memberRepository.findById(memberId);
+        int discountPrice = discountPolicy.discount(member, itemPrice);
+
+        return new Order(memberId, itemName, itemPrice, discountPrice);
+    }
+}
+```
+
+* 설계 변경으로 `OrderSerivceImpl`은 `FixDiscountPolicy`를 의존하지 않는다
+* 단지 `DiscountPolicy` 인터페이스에만 의존한다.
+* `OrderServiceImpl` 입장에서 생성자를 통해 어떤 구현 객체가 들어올지는 알 수 없다.
+* `OrderServiceImpl`의 생성자를 통해서 어떤 구현 객체를 주입할지는 오직 외부 `AppConfig`에서 결정한다.
+* `OrderServiceImpl`은 이제부터 실행에만 집중한다.
+* `OrderServiceImpl`에는 `MemoryMemberRepository`, `FixDiscountPolicy` 객체의 의존관계가 주입된다.
+
+### AppConfig 실행
+
+#### 사용 클래스 - MemberApp
+
+```java
+package hello.core;
+
+import hello.core.member.Grade;
+import hello.core.member.Member;
+import hello.core.member.MemberService;
+
+public class MemberApp {
+
+    public static void main(String[] args) {
+        AppConfig appConfig = new AppConfig();
+        MemberService memberService = appConfig.memberService();
+        Member member = new Member(1L, "memberA", Grade.VIP);
+        memberService.join(member);
+
+        Member findMember = memberService.findMember(1L);
+        System.out.println("member = " + member.getName());
+        System.out.println("findMember = " + findMember.getName());
+    }
+}
+```
+
+#### 사용 클래스 - OrderApp
+
+```java
+package hello.core;
+
+import hello.core.member.Grade;
+import hello.core.member.Member;
+import hello.core.member.MemberService;
+import hello.core.order.Order;
+import hello.core.order.OrderService;
+
+public class OrderApp {
+  public static void main(String[] args) {
+    AppConfig appConfig = new AppConfig();
+    MemberService memberService = appConfig.memberService();
+    OrderService orderService = appConfig.orderService();
+
+    long memberId = 1L;
+    Member member = new Member(memberId, "memberA", Grade.VIP);
+    memberService.join(member);
+
+    Order order = orderService.createOrder(memberId, "itemA", 10000);
+    System.out.println("order = " + order);
+  }
+}
+```
+
+#### 테스트 코드 오류 수정
+
+```java
+package hello.core.member;
+
+import hello.core.AppConfig;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class MemberServiceTest {
+
+  MemberService memberService;
+
+  @BeforeEach
+  public void before() {
+    AppConfig appConfig = new AppConfig();
+    memberService = appConfig.memberService();
+  }
+
+  @Test
+  void join() {
+    Member member = new Member(1L, "memberA", Grade.VIP);
+
+    memberService.join(member);
+    Member findMember = memberService.findMember(1L);
+
+    assertThat(member).isEqualTo(findMember);
+  }
+}
+```
+
+
+```java
+package hello.core.order;
+
+import hello.core.AppConfig;
+import hello.core.member.Grade;
+import hello.core.member.Member;
+import hello.core.member.MemberService;
+import hello.core.member.MemberServiceImpl;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+class OrderServiceTest {
+    MemberService memberService;
+    OrderService orderService;
+    
+    @BeforeEach
+    public void before(){
+        AppConfig appConfig = new AppConfig();
+        memberService = appConfig.memberService();
+        orderService = appConfig.orderService();
+    }
+
+    @Test
+    void createOrder() {
+        long memberId = 1L;
+        Member member = new Member(memberId, "memberA", Grade.VIP);
+        memberService.join(member);
+
+        Order order = orderService.createOrder(memberId, "itemA", 10000);
+        org.assertj.core.api.Assertions.assertThat(order.getDiscountPrice()).isEqualTo(1000);
+    }
+}
+```
+
