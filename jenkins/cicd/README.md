@@ -90,3 +90,46 @@ stateDiagram-v2
     운영 --> 개발: 개선 요구 사항
 ```
 
+* 엔지니어가, 개발하고, 빌드하고, 직접 시스템에 배포 및 서비스를 RUN
+* 사용자와 끊임없이 상호작용하면서 서비스를 개선해 나가는 일련의 과정 문화
+
+![](res/img_3.png)
+
+#### CI/CD
+
+* Continuous Integration
+  * 작업된 코드의 컴파일
+  * 테스트
+  * 패키징
+
+* Continuous Delivery
+  * 개발, 운영 서버로 배포
+
+* Continuous Deployment
+
+![](res/img_4.png)
+
+### CI/CD Flow
+
+![](res/img_5.png)
+
+
+#### Deploy on Docker using Jenkins
+
+![](res/img_6.png)
+
+
+### Jenkins
+
+* 지속적인 통합 배포 -> work flow를 제어
+  * Continuous Integration Server
+    * Continuous Development, Build, Test, Deploy
+* 다양한 Plugins 연동
+  * Build Plugins: Maven, Ant, Gradle
+  * VCS Plugins: Git, SVN
+  * Language Plugins: Java, Python, Node.js
+
+#### Jenkins Pipeline
+
+![](res/img_7.png)
+
