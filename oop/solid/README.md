@@ -241,7 +241,7 @@ class Frog implements LivingInWater, LivingOnLand{
     }
 }
 
-class Duck implements LivingInSky, LivingInWater, LivingOnLand{
+class duck.Duck implements LivingInSky, LivingInWater, LivingOnLand{
 
     @Override
     public void eat() {
