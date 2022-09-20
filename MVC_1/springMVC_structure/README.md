@@ -365,3 +365,476 @@ public class OldController implements Controller {
 1. `DispatcherServlet`이 조회한 `SimpleControllerHandlerAdapter`를 실행하면서 핸들러 정보도 함께 넘겨준다.
 2. `SimpleControllerHandlerAdapter`는 핸들러인 `OldController`를 내부에서 실행하고, 그 결과를 반환한다.
 
+### HttpRequestHandler
+
+* `HttpRequestHandler`는 서블릿과 가장 유사한 형태의 핸들러이다.
+
+#### HttpRequestHandler
+
+```java
+@FunctionalInterface
+public interface HttpRequestHandler {
+    
+	void handleRequest(HttpServletRequest request, HttpServletResponse response)
+			throws ServletException, IOException;
+
+}
+```
+
+#### [MyHttpRequestHandler](./src/main/java/com/example/servlet3/web/springmvc/old/MyHttpRequestHandler.java)
+
+```java
+package com.example.servlet3.web.springmvc.old;
+
+import org.springframework.stereotype.Component;
+import org.springframework.web.HttpRequestHandler;
+
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
+@Component("/springmvc/request-handler")
+public class MyHttpRequestHandler implements HttpRequestHandler {
+    @Override
+    public void handleRequest(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+        System.out.println("MyHttpRequestHandler.handleRequest");
+    }
+}
+```
+
+### 1. 핸들러 매핑으로 핸들러 조회
+
+1. `HandlerMapping`을 순서대로 실행해서, 핸들러를 찾는다.
+
+2. 이 경우 빈 이름으로 핸들러를 찾아야 하기 때문에 이름 그대로 빈 이름으로 핸들러를 찾아주는
+   `BeanNameUrlHandlerMapping`가 실행에 성공하고 핸들러인 `MyHttpRequestHandler`를 반환한다.
+
+### 2. 핸들러 어댑터 조회
+
+1. `HandlerAdapter`의 `supports()`를 순서대로 호출한다.
+2. `HttpRequestHandlerAdapter`가 `HttpRequestHandler` 인터페이스를 지원하므로 대상이 된다.
+
+
+#### 3. 핸들러 어댑터 실행
+
+1. `DispatcherServlet`이 조회한 `HttpRequestHandlerAdapter`를 실행하면서 핸들러 정보도 함께 넘겨준다.
+2. `HttpRequestHandlerAdapter`는 핸들러인 `MyHttpRequestHandler`를 내부에서 실행하고, 그 결과를 반환한다.
+
+
+### @RequestMapping
+
+가장 우선순위가 높은 핸들러 매핑과 핸들러 어댑터는,<br/>
+`RequestMappingHandlerMapping`,<br/>
+`RequestMappingHandlerAdapter`이다.<br/>
+`@RequestMapping`의 앞글자를 따서 만든 이름인데, 이것이 스프링에서 주로 사용하는 애노테이션 기반의 컨트롤러를 지원하는 매핑과 어댑터이다.
+
+
+## 뷰 리졸버
+
+#### [OldController - View 조회할 수 있도록 변경](./src/main/java/com/example/servlet3/web/springmvc/old/OldController.java)
+
+```java
+package com.example.servlet3.web.springmvc.old;
+
+import org.springframework.stereotype.Component;
+import org.springframework.web.servlet.ModelAndView;
+import org.springframework.web.servlet.mvc.Controller;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+@Component("/springmvc/old-controller")
+public class OldController implements Controller {
+
+    @Override
+    public ModelAndView handleRequest(HttpServletRequest request, HttpServletResponse response) throws Exception {
+        System.out.println("OldController.handleRequest");
+        return new ModelAndView("new-form");
+    }
+}
+```
+
+#### 뷰 리졸버 - InternalResourceViewResolver
+
+스프링 부트는 `InternalResourceViewResolver`라는 뷰 리졸버를 자동으로 등록하는데, 이때 `application.properties`에 등록한
+`spring.mvc.view.prefix`, `spring.mvc.view.suffix`, 설정 정보를 사용해서 등록한다.
+
+### 뷰 맂졸버 동작 방식
+
+![](res/img_2.png)
+
+#### 스프링 부트가 자동으로 등록하는 뷰 리졸버
+
+1. `BeanNameViewResolver`: 빈 이름으로 뷰를 찾아서 반환한다.
+2. `InternalResourceViewResolver`: JSP를 처리할 수 있는 뷰를 반환한다.
+
+#### 1. 핸들러 어댑터 호출
+
+ 핸들러 어댑터를 통해 `new-form`이라는 논리 뷰 이름을 획득한다.
+ 
+
+#### 2. ViewResolver 호출
+
+* `new-form`이라는 뷰 이름으로 viewResolver를 순서대로 호출한다.
+* `BeanNameResolver`는 `new-form`이라는 스프링 빈으로 등록된 뷰를 찾아야 하는데 없다.
+* `InternalResourceViewResolver`가 호출된다.
+
+#### 3. InternalResourceView
+
+이 뷰 리졸버는 `InternalResourceView`를 반환한다.
+
+
+#### 4. 뷰 - InternalResourceView
+
+`InternalResourceView`는 JSP처럼 포워드 `forward()`를 호출해서 처리할 수 있는 경우에 사용한다.
+
+
+#### 5. view.render()
+
+`view.render()`가 호출되고 `InternalResourceView`는 `forward()`를 사용해서 JSP를 실행한다.
+
+
+> 참고
+> 
+> `InternalResourceViewResolver`는 만약 JSTL 라이브러리가 있으면 `InternalResourceView`를 상속받은
+> `JstlView`를 반환한다.
+
+
+> 참고
+> 
+> 다른 뷰는 실제 뷰를 렌더링하지만, JSP의 경우 `forward()`통해서 해당 JSP로 이동해서 렌더링이 된다. JSP를 제외한 나머지 뷰 템플릿들은 
+> `forward()` 과정 없이 렌더링 된다.
+
+
+> 참고
+> 
+> Thymeleaf 뷰 템플릿을 사용하면 `ThymeleafViewResolver`를 등록해야 한다. 최근에는 라이브러리만 추가하면 스프링 부트가 모두 자동화해준다.
+
+
+## 스프링 MVC - 시작하기
+
+스프링이 제공하는 컨트롤러 애노테이션 기반으로 동작해서, 매우 유연하고 실용적이다. 
+
+
+### @RequestMapping
+
+스프링은 애노테이션을 활용한 매우 유연하고, 실용적인 컨트롤러를 만들었는데 이것이 `@RequestMapping` 애노테이션을 사용하는 컨트롤러이다.
+
+#### @RequestMapping
+
+* `RequestMappingHandlerMapping`
+* `RequestMappingHandlerAdapter`
+
+스프링에서 가장 우선순위가 높은 핸들러 매핑과 핸들러 어댑터는 `RequestMappingHandlerMapping`, `RequestMappingHandlerAdapter`이다.
+`@RequestMapping`의 앞글자를 따서 만든 이름인데, 이것이 지금 스프링에서 주로 사용하는 애노테이션 기반의 컨트롤러이다.
+
+
+### [SpringMemberFormControllerV1](./src/main/java/com/example/servlet3/web/springmvc/v1/SpringMemberFormControllerV1.java)
+
+```java
+package com.example.servlet3.web.springmvc.v1;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.servlet.ModelAndView;
+
+@Controller
+public class SpringMemberFormControllerV1 {
+
+    @RequestMapping("/springmvc/v1/members/new-form")
+    public ModelAndView process(){
+        return new ModelAndView("new-form");
+    }
+}
+```
+
+* `@Controller`
+  * 스프링이 자동으로 스프링 빈으로 등록한다.(내부에 `@Component` 애노테이션이 있어서 컴포넌트 스캔의 대상이 된다.)
+  * 스프링 MVC에서 애노테이션 기반 컨트롤러로 인식한다.
+* `@RequestMapping`: 요청 정보를 매핑한다. 해당 URL이 호출되면 이 메서드가 호출된다. 애노테이션을 기반으로 동작하기 때문에, 
+  메서드의 이름은 임의로 지으면 된다.
+* `ModelAndView`: 모델과 뷰 정보를 담아서 반환하면 된다.
+
+
+`RequestMappingHandlerMapping`은 스프링 빈 중에서 `@RequestMapping` 또는 `@Controller`가 클래스 레벨에 붙어 있는 경우에 
+매핑 정보로 인식한다.
+
+
+따라서 다음 코드도 동일하게 동작한다.
+
+```java
+package com.example.servlet3.web.springmvc.v1;
+
+import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.servlet.ModelAndView;
+
+@Conponent
+@RequestMapping
+public class SpringMemberFormControllerV1 {
+
+    @RequestMapping("/springmvc/v1/members/new-form")
+    public ModelAndView process(){
+        return new ModelAndView("new-form");
+    }
+}
+```
+
+
+컴포넌트 스캔 없이 다음과 같이 스프링 빈으로 직접 등록해도 된다.
+
+
+```java
+package com.example.servlet3.web.springmvc.v1;
+
+import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.servlet.ModelAndView;
+
+@RequestMapping
+public class SpringMemberFormControllerV1 {
+
+    @RequestMapping("/springmvc/v1/members/new-form")
+    public ModelAndView process(){
+        return new ModelAndView("new-form");
+    }
+}
+```
+
+
+#### ServletApplication
+
+```java
+
+import java.beans.BeanProperty;
+
+@Bean
+TestController testController(){
+    return new TestController();
+}
+```
+
+#### [SpringMemberSaveControllerV1 - 회원 저장](./src/main/java/com/example/servlet3/web/springmvc/v1/SpringMemberSaveControllerV1.java)
+
+```java
+package com.example.servlet3.web.springmvc.v1;
+
+import com.example.servlet3.domain.member.Member;
+import com.example.servlet3.domain.member.MemberRepository;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.servlet.ModelAndView;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+@Controller
+public class SpringMemberSaveControllerV1 {
+
+    private MemberRepository memberRepository = MemberRepository.getInstance();
+
+    @RequestMapping("/springmvc/v1/members/save")
+    public ModelAndView process(HttpServletRequest request, HttpServletResponse response){
+        String username = request.getParameter("username");
+        int age = Integer.parseInt(request.getParameter("age"));
+
+        Member member = new Member(username, age);
+        memberRepository.save(member);
+
+        ModelAndView mv = new ModelAndView("save-result");
+        mv.addObject("member", member);
+        return mv;
+    }
+}
+```
+
+* `mv.addObject("member", member)`
+  * 스프링이 제공하는 `ModelAndView`를 통해 Model 데이터를 추가할 때는 `addObject()`를 사용하면 된다.
+    이 데이터는 이후 뷰를 렌더링 할 대 사용된다.
+
+#### [SpringMemberListControllerV1 - 회원 목록](./src/main/java/com/example/servlet3/web/springmvc/v1/SpringMemberListControllerV1.java)
+
+```java
+package com.example.servlet3.web.springmvc.v1;
+
+import com.example.servlet3.domain.member.Member;
+import com.example.servlet3.domain.member.MemberRepository;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.servlet.ModelAndView;
+
+import java.util.List;
+
+@Controller
+public class SpringMemberListControllerV1 {
+
+    private final MemberRepository memberRepository = MemberRepository.getInstance();
+
+    @RequestMapping("/springmvc/v1/members")
+    public ModelAndView process(){
+
+        List<Member> members = memberRepository.findAll();
+        ModelAndView mv = new ModelAndView("members");
+        mv.addObject("members", members);
+        return mv;
+    }
+}
+```
+
+## 스프링 MVC - 컨트롤러 통합
+
+`@RequestMapping`을 잘보면 클래스 단위가 아니라 메서드 단위에 적용된 것을 확인할 수 있다. 따라서 컨트롤러 클래스를 유연하게 하나로 통합할 수 있다.
+
+#### [SpringMemberControllerV2](./src/main/java/com/example/servlet3/web/springmvc/v2/SpringMemberControllerV2.java)
+
+```java
+package com.example.servlet3.web.springmvc.v2;
+
+import com.example.servlet3.domain.member.Member;
+import com.example.servlet3.domain.member.MemberRepository;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.servlet.ModelAndView;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.util.List;
+
+@Controller
+@RequestMapping("/springmvc/v2/members")
+public class SpringMemberControllerV2 {
+
+    private MemberRepository memberRepository = MemberRepository.getInstance();
+
+    @RequestMapping("/new-form")
+    public ModelAndView newForm(){
+        return new ModelAndView("new-form");
+    }
+
+    @RequestMapping
+    public ModelAndView save(){
+
+        List<Member> members = memberRepository.findAll();
+        ModelAndView mv = new ModelAndView("members");
+        mv.addObject("members", members);
+        return mv;
+    }
+
+    @RequestMapping("/save")
+    public ModelAndView members(HttpServletRequest request, HttpServletResponse response){
+        String username = request.getParameter("username");
+        int age = Integer.parseInt(request.getParameter("age"));
+
+        Member member = new Member(username, age);
+        memberRepository.save(member);
+
+        ModelAndView mv = new ModelAndView("save-result");
+        mv.addObject("member", member);
+        return mv;
+    }
+}
+```
+
+
+#### 조합
+
+컨틀러 클래스를 통합하는 것을 넘어서 조합도 가능하다.
+
+해당 코드에는 `/springmvc/v2/members`라는 부분에 중복이 있다.
+
+* `@RequestMapping("/springmvc/v2/members/new-form")`
+* `@RequestMapping("/springmvc/v2/members")`
+* `@RequestMapping("/springmvc/v2/members/save")`
+
+
+클래스 레벨에 다음과 같이 `@RequestMapping`을 두면 메서드 레벨과 조합이 된다.
+
+```java
+@Controller
+@RequestMapping("/springmvc/v2/members")
+public class SpringMemberControllerV2
+```
+
+## 스프링 MVC - 실용적인 방식
+
+스프링 MVC는 개발자가 편리하게 개발할 수 있도록 수 많은 편의 기능을 제공한다.
+
+#### [SpringMemberControllerV3](./src/main/java/com/example/servlet3/web/springmvc/v3/SpringMemberControllerV3.java)
+
+```java
+package com.example.servlet3.web.springmvc.v3;
+
+import com.example.servlet3.domain.member.Member;
+import com.example.servlet3.domain.member.MemberRepository;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.List;
+
+@Controller
+@RequestMapping("/springmvc/v3/members")
+public class SpringMemberControllerV3 {
+
+    private MemberRepository memberRepository = MemberRepository.getInstance();
+
+    @GetMapping("/new-form")
+    public String newForm(){
+        return "new-form";
+    }
+
+    @GetMapping
+    public String members(Model model){
+
+        List<Member> members = memberRepository.findAll();
+        model.addAttribute("members", members);
+        return "members";
+    }
+
+    @PostMapping( "/save")
+    public String save(
+            @RequestParam("username") String username,
+            @RequestParam("age") int age,
+            Model model){
+
+        Member member = new Member(username, age);
+        memberRepository.save(member);
+
+        model.addAttribute("member", member);
+        return "save-result";
+    }
+}
+```
+
+#### Model 파라미터
+
+`save()`, `members()`를 보면 Model을 파라미터로 받는 것을 확인할 수 있다. 스프링 MVC도 이런 편의 기능을 제공한다.
+
+#### ViewName 직접 반환
+
+뷰의 논리 이름을 반환할 수 있다.
+
+
+#### @RequestParam 사용
+
+스프링은 HTTP 요청 파라미터를 `@RequestParam`으로 받을 수 있다.
+`@RequestParam("username")`은 `request.getParameter("username")`와 거의 같은 코드이다.
+
+
+#### @RequestMapping -> @GetMapping, @PostMapping
+
+`@RequestMapping`은 URL만 매칭하는 것이 아니라, HTTP Method도 함께 구분할 수 있다.
+예를 들어서 URL이 `/new-form`이고, HTTP Method가 GET인 경우를 모두 만족하는 매핑을 하려면 다음과 같이 처리하면 된다.
+
+```java
+@RequestMapping(value = "/new-form", method = RequestMethod.GET)
+```
+
+이것을 `@GetMapping`, `@PostMapping`으로 더 편리하게 사용할 수 있다.
+
