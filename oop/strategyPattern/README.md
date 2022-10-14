@@ -4,10 +4,10 @@
 
 ```mermaid
 classDiagram
-Duck <|-- MallardDuck
-Duck <|-- RedheadDuck
-<<abstract>> Duck
-Duck : quack()
+duck.Duck <|-- MallardDuck
+duck.Duck <|-- RedheadDuck
+<<abstract>> duck.Duck
+duck.Duck : quack()
 MallardDuck: display()
 RedheadDuck: display()
 ```
@@ -29,9 +29,9 @@ RedheadDuck: display()
 
 ```mermaid
 classDiagram
-Duck <|-- MallardDuck
-Duck <|-- RedheadDuck
-class Duck{
+duck.Duck <|-- MallardDuck
+duck.Duck <|-- RedheadDuck
+class duck.Duck{
     <<abstact>>
     + quack()
     + swim()
@@ -51,10 +51,10 @@ class RedheadDuck{
 
 ```mermaid
 classDiagram
-Duck <|-- MallardDuck
-Duck <|-- RedheadDuck
-Duck <|-- RubberDuck
-class Duck{
+duck.Duck <|-- MallardDuck
+duck.Duck <|-- RedheadDuck
+duck.Duck <|-- RubberDuck
+class duck.Duck{
     <<abstract>>
     + quack()
     + swim()
@@ -99,9 +99,9 @@ classDiagram
 FlyingDuck <|-- MallardDuck
 FlyingDuck <|-- RedheadDuck
 NonFlyingDuck <|-- RubberDuck
-Duck <|-- FlyingDuck
-Duck <|-- NonFlyingDuck
-class Duck{
+duck.Duck <|-- FlyingDuck
+duck.Duck <|-- NonFlyingDuck
+class duck.Duck{
     <<abstract>>
     + swim()
 }
@@ -139,10 +139,10 @@ Flyable <|.. RedheadDuck
 Quackable <|.. MallardDuck
 Quackable <|.. RedheadDuck
 Quackable <|.. RubberDuck
-Duck <|-- MallardDuck
-Duck <|-- RedheadDuck
-Duck <|-- RubberDuck
-Duck <|-- WoodenDuck
+duck.Duck <|-- MallardDuck
+duck.Duck <|-- RedheadDuck
+duck.Duck <|-- RubberDuck
+duck.Duck <|-- WoodenDuck
 
 class Flyable{
     <<interface>>
@@ -153,7 +153,7 @@ class Quackable{
     + quack()
 }
 
-class Duck{
+class duck.Duck{
     <<abstract>>
     + swim()
     + display - abstract()
@@ -212,15 +212,15 @@ class WoodenDuck{
 
 ```mermaid
 classDiagram
-FlyStrategy <|.. FlyWithWings
-FlyStrategy <|.. FlyNoWay
+fly.FlyStrategy <|.. fly.FlyWithWings
+fly.FlyStrategy <|.. FlyNoWay
 
-class FlyStrategy{
+class fly.FlyStrategy{
     <<interface>>
     + doFly()
 }
 
-class FlyWithWings{
+class fly.FlyWithWings{
     + doFly()
 }
 
@@ -239,23 +239,23 @@ class FlyNoWay{
 
 ```mermaid
 classDiagram
-class Duck{
+class duck.Duck{
     <<abstract>>
-    - flyStrategy: FlyStrategy
-    - quackStrategy: QuackStrategy
+    - flyStrategy: fly.FlyStrategy
+    - quackStrategy: quack.QuackStrategy
     + quack()
     + swim()
     + fly()
-    + setFlyStrategy(FlyStrategy)
-    + setQuackStrategy(QuackStrategy)
+    + setFlyStrategy(fly.FlyStrategy)
+    + setQuackStrategy(quack.QuackStrategy)
     + display - abstrac ()
 }
 ```
 
 ```java
-public abstract class Duck {
-    protected FlyStrategy flyStrategy;
-    protected QuackStrategy quackStrategy;
+public abstract class duck.Duck {
+    protected fly.FlyStrategy flyStrategy;
+    protected quack.QuackStrategy quackStrategy;
 
     public void quack() {
         quackStrategy.doQuack();
@@ -269,20 +269,20 @@ public abstract class Duck {
         System.out.println("swimming~~~");
     }
 
-    public void setFlyStrategy(FlyStrategy flyStrategy) {
+    public void setFlyStrategy(fly.FlyStrategy flyStrategy) {
         this.flyStrategy = flyStrategy;
     }
 
-    public void setQuackStrategy(QuackStrategy quackStrategy) {
+    public void setQuackStrategy(quack.QuackStrategy quackStrategy) {
         this.quackStrategy = quackStrategy;
     }
 }
 ```
 
 ```java
-public class MallardDuck extends Duck{
+public class MallardDuck extends duck.Duck{
     public MallardDuck(){
-        flyStrategy = new FlyWithWings();
+        flyStrategy = new fly.FlyWithWings();
         quackStrategy = new Quack();
     }
   
@@ -304,7 +304,7 @@ duck.fly();
 * 새로운 오리 타입을 만들기 쉽다.
 
 ```java
-public class ModelDuck extends Duck{
+public class ModelDuck extends duck.Duck{
     public ModelDuck(){
         flyStrategy = new FlyNoWay();
         quackStrategy = new Quack();
@@ -326,41 +326,41 @@ public class FlyRocketPowered implements FlyBehavior{
 
 ```mermaid
 classDiagram
-Duck -- "1" FlyStrategy
-Duck -- "1" QuackStrategy
-FlyStrategy <|-- FlyWithWings
-FlyStrategy <|-- FlyNoWay
-QuackStrategy <|-- Quack
-QuackStrategy <|-- Squeak
-QuackStrategy <|-- MuteQuack
-Duck <|-- MallardDuck
-Duck <|-- RedheadDuck
-Duck <|-- RubberDuck
-Duck <|-- WoodenDuck
+duck.Duck -- "1" fly.FlyStrategy
+duck.Duck -- "1" quack.QuackStrategy
+fly.FlyStrategy <|-- fly.FlyWithWings
+fly.FlyStrategy <|-- FlyNoWay
+quack.QuackStrategy <|-- Quack
+quack.QuackStrategy <|-- Squeak
+quack.QuackStrategy <|-- MuteQuack
+duck.Duck <|-- MallardDuck
+duck.Duck <|-- RedheadDuck
+duck.Duck <|-- RubberDuck
+duck.Duck <|-- WoodenDuck
 
-class Duck{
+class duck.Duck{
     <<abstract>>
-    - flyStrategy: FlyStrategy
-    - quackStrategy: QuackStrategy
+    - flyStrategy: fly.FlyStrategy
+    - quackStrategy: quack.QuackStrategy
     + quack()
     + swim()
     + fly()
-    + setFlyStrategy(FlyStrategy)
-    + setQuackStrategy(QuackStrategy)
+    + setFlyStrategy(fly.FlyStrategy)
+    + setQuackStrategy(quack.QuackStrategy)
     + display - abstract ()
 }
 
-class FlyStrategy{
+class fly.FlyStrategy{
     <<interface>>
     + doFly()
 }
 
-class QuackStrategy{
+class quack.QuackStrategy{
     <<interface>>
     + doQuack()
 }
 
-class FlyWithWings{
+class fly.FlyWithWings{
     + doFly()
 }
 
@@ -433,7 +433,7 @@ class WoodenDuck{
 
 * 행위의 모델링(interface, operation의 정의)이 쉽지 않을 수 있다.
   * 클라이언트의 상태가 필요한 경우에 해결책을 고민해 봐야한다.
-    * 예) `FlyWithWings`는 날개 정보가 필요할 수 있다.
+    * 예) `fly.FlyWithWings`는 날개 정보가 필요할 수 있다.
       *  `방법 1` - 클라이언트 전달. 예) `flyingStrategy.doFly(this);`
       * `방법 2` - 데이터 전달. 예) `flyingStrategy.doFly(wings);`
     * 전략을 사용하는 클라이언트가 다양할 경우 `방법 1`은 복잡해지며, 전달해야 하는 데이터가
