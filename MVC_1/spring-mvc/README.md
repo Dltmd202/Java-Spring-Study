@@ -756,3 +756,173 @@ public String requestBodyJsonV2(@RequestBody String messageBody) throws IOExcept
     return "ok";
 }
 ```
+
+* `@RequestBody`를 사용해서 HTTP 메시지에서 데이터를 꺼내고 messageBody에 저장한다.
+* 문자로 된 JSON 데이터인 `messageBody`를 `objectMapper`를 통해서 자바 객체로 변환한다.
+
+#### requestBodyJsonV3 - @RequestBody 객체 변환
+
+```java
+@ResponseBody
+@PostMapping("/request-body-json-v3")
+public String requestBodyJsonV3(@RequestBody HelloData data){
+    log.info("username={}, age={}", data.getUsername(), data.getAge());
+    return "ok";
+}
+```
+
+#### @RequestBody 객체 파라미터
+
+* `@RequestBody HelloData data`
+* `@RequestBody`에 직접 만든 객체를 지정할 수 있다.
+
+`HttpEntity`, `@RequestBody`를 사용하면 HTTP 메시지 컨버터가 HTTP 메시지 바디의 내용을 우리가 원하는 문자나 객체 등으로 변환해준다.
+HTTP 메시지 컨버터는 문자 뿐만 아니라 JSON도 객체로 변환해주는데, 우리가 방금 V2에서 했던 작업을 대신 처리해준다.
+
+
+##### @RequestBody는 생략 불가능
+
+스프링은 `@ModelAttribute`, `@RequestParam` 해당 생략시 다음과 같은 규칙을 적용한다.
+* `String`, `int`, `Integer` 같은 단순 타입 = `@RequestParam`
+* 나머지 = `@ModelAttribute` (argument resolver로 지정해둔 타입 외)
+
+따라서 이 경우 HelloData에 `@RequestBody`를 생략하면 `@ModelAttribute`가 적용되어버린다.
+`HelloData data` -> `@ModelAttribute HelloData data`
+따라서 생략하면 HTTP 메시지 바디가 아니라 요청 파라미터를 처리하게 된다.
+
+> 주의
+> 
+> HTTP 요청시에 content-type이 appliction/json인지 꼭! 확인해야 한다. 그래야 JSON을 처리할 수 있는 HTTP 메시지 컨버터가 실행된다.
+
+
+#### requestBodyJsonV4 - HttpEntity
+
+```java
+@ResponseBody
+@PostMapping("/request-body-json-v4")
+public String requestBodyJsonV4(HttpEntity<HelloData> httpEntity){
+    HelloData data = httpEntity.getBody();
+    log.info("username={}, age={}", data.getUsername(), data.getAge());
+    return "ok";
+}
+```
+
+#### requestBodyJsonV5
+
+```java
+@ResponseBody
+@PostMapping("/request-body-json-v5")
+public HelloData requestBodyJsonV5(@RequestBody HelloData data){
+    log.info("username={}, age={}", data.getUsername(), data.getAge());    
+}
+```
+
+* `@RequestBody`: 응답의 경우에도 `@RequestBody`를 사용하면 해당 객체를 HTTP 메시지 바디에 직접 넣어줄수 있다.
+  물론 이 경우에도 `HTTPEntity`를 사용해도 된다.
+
+## HTTP 응답 - 정적 리소스, 뷰 템플릿
+
+* 정적 리소스
+  * 예) 웹 브라우저에 정적인 HTML, css, js를 제공할 때는, 정적 리소스를 사용한다.
+* 뷰 템플릿 사용
+  * 예) 웹 브라우저에 동적인 HTML을 제공할 때는 뷰 텝플릿을 사용한다.
+
+#### 정적 리소스
+
+스프링 부트는 클래스패스의 다음 디렉토리에 있는 정적 리소스를 제공한다.
+* `/static`
+* `/public`
+* `/resources`
+* `/META-INF/resources`
+
+
+`src/main/resources`는 리소스를 보관하는 곳이고, 또 클래스패스의 시작 경로이다.
+따라서 다음 디렉토리에 리소스를 넣어두면 스프링 부트가 정적 리소스 서비스를 제공한다.
+
+#### 정적 리소스 경로
+`src/main/resources/static`
+
+
+다음 경로에 파일이 들어있으면 - `src/main/resources/static/basic/hello-form.html`
+
+
+웹 브라우저에서 다음과 같이 실행하면 된다. - `http://localhost:8080/basic/hello-form.html`
+
+
+### 뷰 템플릿
+
+뷰 템플릿을 거쳐서 HTML이 생성되고, 뷰가 응답을 만들어서 전달한다.
+일반적으로 HTML을 동적으로 생성하는 용도로 사용하지만, 다른 것들도 가능하다. 뷰 템플릿을 만들 수 있는 것이라면 뭐든지 가능하다.
+
+
+#### 뷰 템플릿 경로
+`src/main/resources/templates`
+
+#### 뷰 템플릿 생성
+`src/main/resources/templates/responses/hello.html`
+
+```html
+<!Doctype html>
+<html xmln:th="http://www.thymleaf.orf">
+<head>
+  <meta charset="UTF-8">
+</head>
+<body>
+    <p th:text="${data}">empty</p>
+</body>
+</html>
+```
+
+#### [ResponseViewController - 뷰 템플릿을 호출하는 컨트롤러](./src/main/java/hello/springmvc/basic/response/ResponseViewController.java)
+
+```java
+package hello.springmvc.basic.response;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.servlet.ModelAndView;
+
+@Controller
+public class ResponseViewController {
+
+    @RequestMapping("/response-view-v1")
+    public ModelAndView responseViewV1(){
+        ModelAndView mv = new ModelAndView("response/hello")
+                .addObject("data", "hello!");
+        return mv;
+    }
+
+    @RequestMapping("/response-view-v2")
+    public String responseViewV2(Model model){
+        model.addAttribute("data", "hello!");
+        return "response/hello";
+    }
+
+    @RequestMapping("/response/hello")
+    public void responseViewV3(Model model){
+        model.addAttribute("data", "hello!");
+    }
+
+}
+```
+
+#### String을 반환하는 경우 - View or HTTP 메시지
+
+`@ResponseBody`가 없으면 `response/hello`로 뷰 리졸버가 실행되어서 뷰를 찾고, 렌더링 한다.
+`@ResponseBody`가 있으면 뷰 리졸버를 실행하지 않고, HTTP 바디에 직접 `response/hello`라는 문자가 입렫된다.
+
+여기서는 뷰의 논리 이름인 `response/hello`를 반환하면 다음 경로의 뷰 템플릿이 렌더링 되는 것을 확인할 수 있다.
+
+* 실행: `templates/response/hello.html`
+
+#### Void를 반환하는 경우
+
+* `@Controller`를 사용하고, `HttpServletResponse`, `OutputStream(Writer)` 같은 HTTP 메시지 바디를 처리하는 파라미터가 없으면
+  요청 URL을 참고해서 논리 뷰 이름으로 사용
+
+#### HTTP 메시지
+
+`@ResposneBody`, `HttpEntity`를 사용하면, 뷰 템플릿을 사용하는 것이 아니라, HTTP 메시지 바디에 직접 응답 데이터를 출력할 수 있다.
+
+
