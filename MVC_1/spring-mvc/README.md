@@ -926,3 +926,681 @@ public class ResponseViewController {
 `@ResposneBody`, `HttpEntity`를 사용하면, 뷰 템플릿을 사용하는 것이 아니라, HTTP 메시지 바디에 직접 응답 데이터를 출력할 수 있다.
 
 
+## HTTP 응답 - HTTP API, 메시지 바디에 직접 입력
+
+HTTP API를 제공하는 경우에는 HTML이 아니라 데이터를 전달해야 하므로, HTTP 메시지 바디에 JSON 같은 형식으로 데이터를 실어 보낸다.
+
+
+> 참고
+> 
+> HTML이나 뷰 템플릿을 사용해도 HTTP 응답 메시지 바디에 HTML 데이터가 담겨서 전달된다. 여기서 설명하는 내용은 정적 리소스나 뷰 템플릿을 거치지 않고,
+> 직접 HTTP 응답 메시지를 전달하는 경우를 말한다.
+
+#### [ResponseBodyController](./src/main/java/hello/springmvc/basic/response/ResponseBodyController.java)
+
+```java
+package hello.springmvc.basic.response;
+
+import hello.springmvc.basic.HelloData;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
+
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
+@Controller
+public class ResponseBodyController {
+
+    @GetMapping("/response-body-string-v1")
+    public void responseBodyV1(HttpServletResponse response) throws IOException {
+        response.getWriter().write("ok");
+    }
+
+    @GetMapping("/response-body-string-v2")
+    public ResponseEntity<String> responseBodyV2() throws IOException {
+        return new ResponseEntity<>("ok", HttpStatus.OK);
+    }
+
+
+    @GetMapping("/response-body-string-v3")
+    public String responseBodyV3() throws IOException {
+        return "ok";
+    }
+
+    @GetMapping("/response-body-json-v1")
+    public ResponseEntity<HelloData> responseBodyJsonV1(){
+        HelloData helloData = new HelloData();
+        helloData.setUsername("userA");
+        helloData.setAge(20);
+        return new ResponseEntity<>(helloData, HttpStatus.OK);
+    }
+
+    @ResponseStatus(HttpStatus.OK)
+    @ResponseBody
+    @GetMapping("/response-body-json-v2")
+    public HelloData responseBodyJsonV2(){
+        HelloData helloData = new HelloData();
+        helloData.setUsername("userA");
+        helloData.setAge(20);
+        return helloData;
+    }
+}
+```
+
+#### responseBodyV1
+
+서블릿을 직접 다룰 때 처럼 HttpServletResponse 객체를 통해서 HTTP 메시지 바디에 직접 `ok` 응답 메시지를 전달한다.
+`response.getWriter().write("ok")`
+
+
+#### responseBodyV2
+
+`ResponseEntity` 엔티티는 `HttpEntity`를 상속 받았는데, HttpEntity는 Http 메시지의 헤더, 바디 정보를 가지고 있다. `ResponseEntity`는
+여기에 더해서 HTTP 응답 코드를 설정할 수 있다.
+
+`HttpStatus.CREATED`로 변경하면 201 응답이 나가는 것을 확인할 수 있다.
+
+
+#### responseBodyV3
+
+`@ResponseBody`를 사용하면 view를 사용하지 않고, HTTP 메시지 컨버터를 통해서 HTTP 메시지를 직접 입력할 수 있다. 
+`ResponseEntity`도 동일한 방식으로 동작한다.
+
+#### responseBodyJsonV1
+
+`ResponseEntity`를 반환한다. HTTP 메시지 컨버터를 통해서 JSON 형식으로 반환되어서 반환된다.
+
+#### responseBodyJsonV2
+
+`ResponseEntity`는 HTTP 응답 코드를 설정할 수 있는데, `@ResponseBody`를 사용하면 이런 것을
+설정하기 까다롭다.
+
+`@ResponseStatus(HttpStatus.OK)` 애노테이션을 사용하면 응답 코드도 설정할 수 있다.
+
+
+
+#### @RestController
+
+`@Controller` 대신에 `@RestController` 애노테이션을 사용하면, 
+해당 컨트롤러에 모두 `@ResponseBody` 가 적용되는 효과가 있다. 
+따라서 뷰 템플릿을 사용하는 것이 아니라, HTTP 메시지 바디에 직접 데이터를 입력한다. 
+이름 그대로 Rest API(HTTP API)를 만들 때 사용하는 컨트롤러이다.
+
+
+`@ResponseBody` 는 클래스 레벨에 두면 전체에 메서드에 적용되는데, `@RestController` 에노테이션 안에 `@ResponseBody` 가 적용되어 있다.
+
+## HTTP 메시지 컨버터
+
+뷰 템플릿으로 HTML을 생성해서 응답하는 것이 아니라, HTTP API처럼 JSON 데이터를 HTTP 메시지
+바디에서 직접 읽거나 쓰는 경우 HTTP 메시지 컨버터를 사용하면 편리하다.
+
+#### @ResponseBody 사용 원리
+
+![](res/img.png)
+
+* `@ResponseBody`를 사용
+  * HTTP의 BODY에 문자 내용을 직접 반환
+  * `viewResolver` 대신에 `HttpMessageConverter`가 동작
+  * 기본 문자처리: `StringHttpMessageConverter`
+  * 기본 객체처리: `MappingJackson2HttpMessageConverter`
+  * byte 처리 등등 기타 여러 `HttpMessageConverter`가 기본으로 등록되어 있음
+
+> 참고
+> 
+> 응답의 경우 클라이언트의 HTTP Accept 헤더와 서버의 컨트롤러 반환 타입 정보 둘을 조합해서
+> `HttpMessageConverter`가 선택된다.
+
+
+#### 스프링 MVC는 다음의 경우에 HTTP 메시지 컨버터를 적용한다.
+* HTTP 요청: `@RequestBody`, `HttpEntity(RequestEntity)`
+* HTTP 응답: `@ResponseBody`, `HttpEntity(ResponseEntity)`
+
+#### HTTP 메시지 컨버터 인터페이스
+
+```java
+/*
+ * Copyright 2002-2021 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.springframework.http.converter;
+
+import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
+
+import org.springframework.http.HttpInputMessage;
+import org.springframework.http.HttpOutputMessage;
+import org.springframework.http.MediaType;
+import org.springframework.lang.Nullable;
+
+/**
+ * Strategy interface for converting from and to HTTP requests and responses.
+ *
+ * @author Arjen Poutsma
+ * @author Juergen Hoeller
+ * @author Rossen Stoyanchev
+ * @since 3.0
+ * @param <T> the converted object type
+ */
+public interface HttpMessageConverter<T> {
+
+	/**
+	 * Indicates whether the given class can be read by this converter.
+	 * @param clazz the class to test for readability
+	 * @param mediaType the media type to read (can be {@code null} if not specified);
+	 * typically the value of a {@code Content-Type} header.
+	 * @return {@code true} if readable; {@code false} otherwise
+	 */
+	boolean canRead(Class<?> clazz, @Nullable MediaType mediaType);
+
+	/**
+	 * Indicates whether the given class can be written by this converter.
+	 * @param clazz the class to test for writability
+	 * @param mediaType the media type to write (can be {@code null} if not specified);
+	 * typically the value of an {@code Accept} header.
+	 * @return {@code true} if writable; {@code false} otherwise
+	 */
+	boolean canWrite(Class<?> clazz, @Nullable MediaType mediaType);
+
+	/**
+	 * Return the list of media types supported by this converter. The list may
+	 * not apply to every possible target element type and calls to this method
+	 * should typically be guarded via {@link #canWrite(Class, MediaType)
+	 * canWrite(clazz, null}. The list may also exclude MIME types supported
+	 * only for a specific class. Alternatively, use
+	 * {@link #getSupportedMediaTypes(Class)} for a more precise list.
+	 * @return the list of supported media types
+	 */
+	List<MediaType> getSupportedMediaTypes();
+
+	/**
+	 * Return the list of media types supported by this converter for the given
+	 * class. The list may differ from {@link #getSupportedMediaTypes()} if the
+	 * converter does not support the given Class or if it supports it only for
+	 * a subset of media types.
+	 * @param clazz the type of class to check
+	 * @return the list of media types supported for the given class
+	 * @since 5.3.4
+	 */
+	default List<MediaType> getSupportedMediaTypes(Class<?> clazz) {
+		return (canRead(clazz, null) || canWrite(clazz, null) ?
+				getSupportedMediaTypes() : Collections.emptyList());
+	}
+
+	/**
+	 * Read an object of the given type from the given input message, and returns it.
+	 * @param clazz the type of object to return. This type must have previously been passed to the
+	 * {@link #canRead canRead} method of this interface, which must have returned {@code true}.
+	 * @param inputMessage the HTTP input message to read from
+	 * @return the converted object
+	 * @throws IOException in case of I/O errors
+	 * @throws HttpMessageNotReadableException in case of conversion errors
+	 */
+	T read(Class<? extends T> clazz, HttpInputMessage inputMessage)
+			throws IOException, HttpMessageNotReadableException;
+
+	/**
+	 * Write an given object to the given output message.
+	 * @param t the object to write to the output message. The type of this object must have previously been
+	 * passed to the {@link #canWrite canWrite} method of this interface, which must have returned {@code true}.
+	 * @param contentType the content type to use when writing. May be {@code null} to indicate that the
+	 * default content type of the converter must be used. If not {@code null}, this media type must have
+	 * previously been passed to the {@link #canWrite canWrite} method of this interface, which must have
+	 * returned {@code true}.
+	 * @param outputMessage the message to write to
+	 * @throws IOException in case of I/O errors
+	 * @throws HttpMessageNotWritableException in case of conversion errors
+	 */
+	void write(T t, @Nullable MediaType contentType, HttpOutputMessage outputMessage)
+			throws IOException, HttpMessageNotWritableException;
+
+}
+```
+
+#### HTTP 메지시 컨버터는 HTTP 요청, HTTP 응답 둘 다 사용된다.
+
+* `canRead()`, `canWrite()`: 메시지 컨버터가 해당 클래스, 미디어타입을 지원하는지 체크
+* `read()`, `write()`: 메시지 컨버터를 통해서 메시지를 읽고 쓰는 기능
+
+#### 스프링 부트 기본 메지지 컨버터
+
+```
+  0 = ByteArrayHttpMessageConverter
+  1 = StringHttpMessageConverter
+  2 = MappingJackson2HttpMessageConverter
+```
+
+스프링 부트는 다양한 메시지 컨버터를 제공하는데, 대상 클래스 타입과 미디어 타입 둘을 체크해서 사용여부를 결정한다. 
+만약 만족하지 않으면 다음 메시지 컨버터로 우선순위가 넘어간다.
+
+* `ByteArrayHttpMessageConverter` : `byte[]` 데이터를 처리한다. 
+  * 클래스 타입: `byte[]` , 미디어타입: `*/*` ,
+  * 요청 예) `@RequestBody byte[] data`
+  * 응답 예) `@ResponseBody return byte[]` 쓰기 미디어타입 `application/octet-stream`
+* `StringHttpMessageConverter` : `String` 문자로 데이터를 처리한다. 
+  * 클래스 타입: `String` , 미디어타입: `*/*`
+  * 요청 예) `@RequestBody String data`
+  * 응답 예) `@ResponseBody return "ok"` 쓰기 미디어타입 `text/plain`
+* `MappingJackson2HttpMessageConverter` : application/json
+  * 클래스 타입: 객체 또는 `HashMap` , 미디어타입 `application/json` 관련
+  * 요청 예) `@RequestBody HelloData data`
+  * 응답 예) `@ResponseBody return helloData` 쓰기 미디어타입 `application/json` 관련
+
+#### HTTP 요청 데이터 읽기 
+
+* HTTP 요청이 오고, 컨트롤러에서 `@RequestBody` , `HttpEntity` 파라미터를 사용한다. 
+* 메시지 컨버터가 메시지를 읽을 수 있는지 확인하기 위해 `canRead()` 를 호출한다.
+  * 대상 클래스 타입을 지원하는가.
+    * 예) `@RequestBody` 의 대상 클래스 ( `byte[]` , `String` , `HelloData` )
+  * HTTP 요청의 Content-Type 미디어 타입을 지원하는가. 
+    * 예) `text/plain` , `application/json` , `*/*`
+* `canRead()` 조건을 만족하면 `read()` 를 호출해서 객체 생성하고, 반환한다.
+     
+
+#### HTTP 응답 데이터 생성
+* 컨트롤러에서 `@ResponseBody` , `HttpEntity` 로 값이 반환된다.
+* 메시지 컨버터가 메시지를 쓸 수 있는지 확인하기 위해 `canWrite()` 를 호출한다.
+  * 대상 클래스 타입을 지원하는가.
+    * 예) return의 대상 클래스 ( `byte[]` , `String` , `HelloData` )
+  * HTTP 요청의 Accept 미디어 타입을 지원하는가.(더 정확히는 `@RequestMapping` 의 `produces` ) 
+    * 예) `text/plain` , `application/json` , `*/*`
+* `canWrite()` 조건을 만족하면 `write()` 를 호출해서 HTTP 응답 메시지 바디에 데이터를 생성한다.
+
+
+## 요청 매핑 헨들러 어뎁터 구조
+
+#### SpringMVC 구조
+
+![](res/img_1.png)
+
+애노테이션 기반의 컨트롤러, 그러니까 `@RequestMapping`을 처리하는 핸들러 어댑터인
+`RequestMappingHandlerAdapter`(요청 매핑 헨들러 러뎁터)이다.
+
+
+#### RequestMappingHandlerAdapter 동작 방식
+
+![](res/img_2.png)
+
+
+#### ArgumentResolver
+
+애노테이션 기반의 컨트롤러는 매우 다양한 파라미터를 사용할 수 있었다.
+`HttpServletRequest` , `Model` 은 물론이고, `@RequestParam` , `@ModelAttribute` 
+같은 애노테이션 그리고 `@RequestBody` , `HttpEntity` 같은 HTTP 메시지를 처리하는 부분까지 
+매우 큰 유연함을 보여주었다.
+이렇게 파라미터를 유연하게 처리할 수 있는 이유가 바로 `ArgumentResolver` 덕분이다.
+
+
+애노테이션 기반 컨트롤러를 처리하는 `RequestMappingHandlerAdaptor` 는 바로 이 
+`ArgumentResolver` 를 호출해서 컨트롤러(핸들러)가 필요로 하는 다양한 파라미터의 값(객체)을 생성한다.
+그리고 이렇게 파리미터의 값이 모두 준비되면 컨트롤러를 호출하면서 값을 넘겨준다.
+
+정확히는 `HandlerMethodArgumentResolver`인데 줄여서 `ArgumentResolver`라고 부른다.
+
+```java
+/*
+ * Copyright 2002-2014 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.springframework.web.method.support;
+
+import org.springframework.core.MethodParameter;
+import org.springframework.lang.Nullable;
+import org.springframework.web.bind.WebDataBinder;
+import org.springframework.web.bind.support.WebDataBinderFactory;
+import org.springframework.web.context.request.NativeWebRequest;
+
+/**
+ * Strategy interface for resolving method parameters into argument values in
+ * the context of a given request.
+ *
+ * @author Arjen Poutsma
+ * @since 3.1
+ * @see HandlerMethodReturnValueHandler
+ */
+public interface HandlerMethodArgumentResolver {
+
+	/**
+	 * Whether the given {@linkplain MethodParameter method parameter} is
+	 * supported by this resolver.
+	 * @param parameter the method parameter to check
+	 * @return {@code true} if this resolver supports the supplied parameter;
+	 * {@code false} otherwise
+	 */
+	boolean supportsParameter(MethodParameter parameter);
+
+	/**
+	 * Resolves a method parameter into an argument value from a given request.
+	 * A {@link ModelAndViewContainer} provides access to the model for the
+	 * request. A {@link WebDataBinderFactory} provides a way to create
+	 * a {@link WebDataBinder} instance when needed for data binding and
+	 * type conversion purposes.
+	 * @param parameter the method parameter to resolve. This parameter must
+	 * have previously been passed to {@link #supportsParameter} which must
+	 * have returned {@code true}.
+	 * @param mavContainer the ModelAndViewContainer for the current request
+	 * @param webRequest the current request
+	 * @param binderFactory a factory for creating {@link WebDataBinder} instances
+	 * @return the resolved argument value, or {@code null} if not resolvable
+	 * @throws Exception in case of errors with the preparation of argument values
+	 */
+	@Nullable
+	Object resolveArgument(MethodParameter parameter, @Nullable ModelAndViewContainer mavContainer,
+			NativeWebRequest webRequest, @Nullable WebDataBinderFactory binderFactory) throws Exception;
+
+}
+```
+
+#### 동작 방식
+
+`ArgumentResolver`의 `supportsParameter()`를 호출해서 해당 파라미터를 지원하는지 체크하고,
+지원하면 `resolverArgument()`를 호출해서 실제 객체를 생성한다. 그리고 이렇게 생성된 객체가
+컨트롤러 호출시 넘어간다.
+
+그리고 원한다면 직접 이 인터페이스를 확장해서 원하는 `ArgumentResolver`를 만들 수 있다.
+
+#### ReturnValueHandler
+
+`HandlerMethodReturnsValueHandler`를 줄여서 `ReturnValueHandler`라 부른다.
+`ArgumentResolver`와 비슷한데, 이것은 응답 값을 변환하고 처리한다.
+
+
+### HTTP 메시지 컨버터
+
+#### HTTP 메시지 컨버터 위치
+
+![](res/img_3.png)
+
+
+HTTP 메시지 컨버터를 사용하는 `@RequestBody`도 컨트롤러가 필요로 하는 파라미터의 값에 사용된다.
+`@ResponseBody`의 경우도 컨트롤러의 반환 값을 이용한다.
+
+
+요청의 경우 `@RequestBody`를 처리하는 `ArgumentResolver`가 있고, 
+`HttpEntity` 를 처리하는 `ArgumentResolver` 가 있다. 
+이 `ArgumentResolver` 들이 HTTP 메시지 컨버터를 사용해서 필요한 객체를 생성하는 것이다. 
+
+
+응답의 경우 `@ResponseBody` 와 `HttpEntity` 를 처리하는 `ReturnValueHandler` 가 있다. 
+그리고 여기에서 HTTP 메시지 컨버터를 호출해서 응답 결과를 만든다.
+
+
+### 확장
+스프링은 다음을 모두 인터페이스로 제공한다. 따라서 필요하면 언제든지 기능을 확장할 수 있다.
+* `HandlerMethodArgumentResolver` 
+* `HandlerMethodReturnValueHandler` 
+* `HttpMessageConverter`
+
+#### WebMvcConfigurer
+
+```java
+/*
+ * Copyright 2002-2021 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.springframework.web.servlet.config.annotation;
+
+import java.util.List;
+
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.format.Formatter;
+import org.springframework.format.FormatterRegistry;
+import org.springframework.http.converter.HttpMessageConverter;
+import org.springframework.lang.Nullable;
+import org.springframework.validation.MessageCodesResolver;
+import org.springframework.validation.Validator;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.method.support.HandlerMethodArgumentResolver;
+import org.springframework.web.method.support.HandlerMethodReturnValueHandler;
+import org.springframework.web.servlet.DispatcherServlet;
+import org.springframework.web.servlet.HandlerExceptionResolver;
+import org.springframework.web.servlet.HandlerMapping;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter;
+
+/**
+ * Defines callback methods to customize the Java-based configuration for
+ * Spring MVC enabled via {@code @EnableWebMvc}.
+ *
+ * <p>{@code @EnableWebMvc}-annotated configuration classes may implement
+ * this interface to be called back and given a chance to customize the
+ * default configuration.
+ *
+ * @author Rossen Stoyanchev
+ * @author Keith Donald
+ * @author David Syer
+ * @since 3.1
+ */
+public interface WebMvcConfigurer {
+
+	/**
+	 * Help with configuring {@link HandlerMapping} path matching options such as
+	 * whether to use parsed {@code PathPatterns} or String pattern matching
+	 * with {@code PathMatcher}, whether to match trailing slashes, and more.
+	 * @since 4.0.3
+	 * @see PathMatchConfigurer
+	 */
+	default void configurePathMatch(PathMatchConfigurer configurer) {
+	}
+
+	/**
+	 * Configure content negotiation options.
+	 */
+	default void configureContentNegotiation(ContentNegotiationConfigurer configurer) {
+	}
+
+	/**
+	 * Configure asynchronous request handling options.
+	 */
+	default void configureAsyncSupport(AsyncSupportConfigurer configurer) {
+	}
+
+	/**
+	 * Configure a handler to delegate unhandled requests by forwarding to the
+	 * Servlet container's "default" servlet. A common use case for this is when
+	 * the {@link DispatcherServlet} is mapped to "/" thus overriding the
+	 * Servlet container's default handling of static resources.
+	 */
+	default void configureDefaultServletHandling(DefaultServletHandlerConfigurer configurer) {
+	}
+
+	/**
+	 * Add {@link Converter Converters} and {@link Formatter Formatters} in addition to the ones
+	 * registered by default.
+	 */
+	default void addFormatters(FormatterRegistry registry) {
+	}
+
+	/**
+	 * Add Spring MVC lifecycle interceptors for pre- and post-processing of
+	 * controller method invocations and resource handler requests.
+	 * Interceptors can be registered to apply to all requests or be limited
+	 * to a subset of URL patterns.
+	 */
+	default void addInterceptors(InterceptorRegistry registry) {
+	}
+
+	/**
+	 * Add handlers to serve static resources such as images, js, and, css
+	 * files from specific locations under web application root, the classpath,
+	 * and others.
+	 * @see ResourceHandlerRegistry
+	 */
+	default void addResourceHandlers(ResourceHandlerRegistry registry) {
+	}
+
+	/**
+	 * Configure "global" cross origin request processing. The configured CORS
+	 * mappings apply to annotated controllers, functional endpoints, and static
+	 * resources.
+	 * <p>Annotated controllers can further declare more fine-grained config via
+	 * {@link org.springframework.web.bind.annotation.CrossOrigin @CrossOrigin}.
+	 * In such cases "global" CORS configuration declared here is
+	 * {@link org.springframework.web.cors.CorsConfiguration#combine(CorsConfiguration) combined}
+	 * with local CORS configuration defined on a controller method.
+	 * @since 4.2
+	 * @see CorsRegistry
+	 * @see CorsConfiguration#combine(CorsConfiguration)
+	 */
+	default void addCorsMappings(CorsRegistry registry) {
+	}
+
+	/**
+	 * Configure simple automated controllers pre-configured with the response
+	 * status code and/or a view to render the response body. This is useful in
+	 * cases where there is no need for custom controller logic -- e.g. render a
+	 * home page, perform simple site URL redirects, return a 404 status with
+	 * HTML content, a 204 with no content, and more.
+	 * @see ViewControllerRegistry
+	 */
+	default void addViewControllers(ViewControllerRegistry registry) {
+	}
+
+	/**
+	 * Configure view resolvers to translate String-based view names returned from
+	 * controllers into concrete {@link org.springframework.web.servlet.View}
+	 * implementations to perform rendering with.
+	 * @since 4.1
+	 */
+	default void configureViewResolvers(ViewResolverRegistry registry) {
+	}
+
+	/**
+	 * Add resolvers to support custom controller method argument types.
+	 * <p>This does not override the built-in support for resolving handler
+	 * method arguments. To customize the built-in support for argument
+	 * resolution, configure {@link RequestMappingHandlerAdapter} directly.
+	 * @param resolvers initially an empty list
+	 */
+	default void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
+	}
+
+	/**
+	 * Add handlers to support custom controller method return value types.
+	 * <p>Using this option does not override the built-in support for handling
+	 * return values. To customize the built-in support for handling return
+	 * values, configure RequestMappingHandlerAdapter directly.
+	 * @param handlers initially an empty list
+	 */
+	default void addReturnValueHandlers(List<HandlerMethodReturnValueHandler> handlers) {
+	}
+
+	/**
+	 * Configure the {@link HttpMessageConverter HttpMessageConverter}s for
+	 * reading from the request body and for writing to the response body.
+	 * <p>By default, all built-in converters are configured as long as the
+	 * corresponding 3rd party libraries such Jackson JSON, JAXB2, and others
+	 * are present on the classpath.
+	 * <p><strong>Note</strong> use of this method turns off default converter
+	 * registration. Alternatively, use
+	 * {@link #extendMessageConverters(java.util.List)} to modify that default
+	 * list of converters.
+	 * @param converters initially an empty list of converters
+	 */
+	default void configureMessageConverters(List<HttpMessageConverter<?>> converters) {
+	}
+
+	/**
+	 * Extend or modify the list of converters after it has been, either
+	 * {@link #configureMessageConverters(List) configured} or initialized with
+	 * a default list.
+	 * <p>Note that the order of converter registration is important. Especially
+	 * in cases where clients accept {@link org.springframework.http.MediaType#ALL}
+	 * the converters configured earlier will be preferred.
+	 * @param converters the list of configured converters to be extended
+	 * @since 4.1.3
+	 */
+	default void extendMessageConverters(List<HttpMessageConverter<?>> converters) {
+	}
+
+	/**
+	 * Configure exception resolvers.
+	 * <p>The given list starts out empty. If it is left empty, the framework
+	 * configures a default set of resolvers, see
+	 * {@link WebMvcConfigurationSupport#addDefaultHandlerExceptionResolvers(List, org.springframework.web.accept.ContentNegotiationManager)}.
+	 * Or if any exception resolvers are added to the list, then the application
+	 * effectively takes over and must provide, fully initialized, exception
+	 * resolvers.
+	 * <p>Alternatively you can use
+	 * {@link #extendHandlerExceptionResolvers(List)} which allows you to extend
+	 * or modify the list of exception resolvers configured by default.
+	 * @param resolvers initially an empty list
+	 * @see #extendHandlerExceptionResolvers(List)
+	 * @see WebMvcConfigurationSupport#addDefaultHandlerExceptionResolvers(List, org.springframework.web.accept.ContentNegotiationManager)
+	 */
+	default void configureHandlerExceptionResolvers(List<HandlerExceptionResolver> resolvers) {
+	}
+
+	/**
+	 * Extending or modify the list of exception resolvers configured by default.
+	 * This can be useful for inserting a custom exception resolver without
+	 * interfering with default ones.
+	 * @param resolvers the list of configured resolvers to extend
+	 * @since 4.3
+	 * @see WebMvcConfigurationSupport#addDefaultHandlerExceptionResolvers(List, org.springframework.web.accept.ContentNegotiationManager)
+	 */
+	default void extendHandlerExceptionResolvers(List<HandlerExceptionResolver> resolvers) {
+	}
+
+	/**
+	 * Provide a custom {@link Validator} instead of the one created by default.
+	 * The default implementation, assuming JSR-303 is on the classpath, is:
+	 * {@link org.springframework.validation.beanvalidation.OptionalValidatorFactoryBean}.
+	 * Leave the return value as {@code null} to keep the default.
+	 */
+	@Nullable
+	default Validator getValidator() {
+		return null;
+	}
+
+	/**
+	 * Provide a custom {@link MessageCodesResolver} for building message codes
+	 * from data binding and validation error codes. Leave the return value as
+	 * {@code null} to keep the default.
+	 */
+	@Nullable
+	default MessageCodesResolver getMessageCodesResolver() {
+		return null;
+	}
+
+}
+```
