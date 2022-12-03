@@ -49,7 +49,7 @@
 * 공변성은 더 특수화한트 것, 반변성은 더 일반화되는 것을 말함
 
 ```java
-public class Main {
+public class pluggable.Main {
 
 }
 
@@ -191,7 +191,7 @@ class weakenedPostConditionsFoo extends Foo{
 > ISP에서 Interface는 자바의 interface를 말하는 것은 아니다.
 
 ```java
-public class Main {
+public class pluggable.Main {
 }
 
 /**
@@ -459,7 +459,7 @@ class B extends A{
     }
 }
 
-class Main{
+class pluggable.Main{
   public static void main(String[] args) {
       B b = new B();
       ham(b);
