@@ -5,6 +5,17 @@ server:
 spring:
   application:
     name: user-service
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:tcp://localhost/~/testdb
+    username: sa
+    password: 1234
+  jpa:
+    hibernate:
+      ddl-auto: create
+    database: h2
+    database-platform: org.hibernate.dialect.H2Dialect
+
 eureka:
   instance:
     instance-id: ${spring.cloud.client.hostname}:${spring.application.instance_id:${random.value}}
@@ -13,3 +24,6 @@ eureka:
     register-with-eureka: true
     service-url:
       defaultZone: http://localhost:8761/eureka
+
+greeting:
+  message: Welcome
