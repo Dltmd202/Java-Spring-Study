@@ -1,0 +1,35 @@
+management:
+  server:
+    port: 8080
+  info:
+    java:
+      enabled: true
+    os:
+      enabled: true
+    env:
+      enabled: true
+  endpoint:
+    shutdown:
+      enabled: true
+    health:
+#      show-details: always
+      show-components: always
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+
+info:
+  app:
+    name: hello-actuator
+    company: yh
+
+
+logging:
+  level:
+    hello.controller: debug
+
+server:
+  tomcat:
+    mbeanregistry:
+      enabled: true
